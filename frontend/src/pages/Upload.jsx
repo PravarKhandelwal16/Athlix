@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { analyzeVideo } from "../services/analysisService";
 
 function Upload() {
   const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState(null);
   const [movementType, setMovementType] = useState('squat');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -55,7 +58,58 @@ function Upload() {
           {/* Main Upload Area */}
           <div className="md:col-span-2 space-y-12">
             
-            {/* Movement Selector */}
+            {analysisResult ? (
+              <div>
+                <h2 className="text-sm uppercase tracking-wide text-zinc-500 font-medium mb-6">Analysis Result</h2>
+                <div className="bg-white border text-left border-zinc-200 rounded-sm p-8">
+                  <div className="mb-6 flex justify-between items-center border-b border-zinc-200 pb-4">
+                    <h3 className="font-medium text-zinc-900 text-lg">Overall Risk</h3>
+                    <span className={`px-3 py-1 text-xs font-medium uppercase tracking-wide rounded-sm ${analysisResult.risk_level === 'High' ? 'bg-red-100 text-red-800' : analysisResult.risk_level === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                      {analysisResult.risk_level} ({analysisResult.risk_score}/100)
+                    </span>
+                  </div>
+
+                  <div className="mb-8">
+                    <h4 className="text-zinc-900 font-medium text-sm mb-3">Key Factors</h4>
+                    <ul className="space-y-2">
+                      {analysisResult.reasons.map((reason, idx) => (
+                        <li key={idx} className="text-zinc-600 text-sm font-light flex items-start">
+                          <span className="text-zinc-300 mr-2">•</span> {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="text-zinc-900 font-medium text-sm mb-3">Coaching Recommendations</h4>
+                    <div className="space-y-4">
+                      {analysisResult.recommendations.map((rec, idx) => (
+                        <div key={idx} className="p-4 bg-[#FAF9F5] border border-zinc-200 rounded-sm">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{rec.priority}</span>
+                            <span className="text-zinc-300">•</span>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{rec.category}</span>
+                          </div>
+                          <p className="text-zinc-900 text-sm font-medium">{rec.title}</p>
+                          {rec.detail && <p className="text-zinc-500 text-sm font-light mt-1">{rec.detail}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 pt-4 border-t border-zinc-200 flex justify-end">
+                    <button 
+                      onClick={() => { setAnalysisResult(null); setSelectedFile(null); }}
+                      className="px-6 py-3 bg-zinc-900 text-[#FDFDF7] font-medium rounded-sm hover:bg-zinc-800 transition text-sm"
+                    >
+                      New Analysis
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Movement Selector */}
             <div>
               <h2 className="text-sm uppercase tracking-wide text-zinc-500 font-medium mb-6">1. Select Movement</h2>
               <div className="grid sm:grid-cols-2 gap-6">
@@ -136,16 +190,31 @@ function Upload() {
              {/* Action Button */}
              <div className="flex justify-end pt-4">
                 <button 
-                  disabled={!selectedFile}
+                  onClick={async () => {
+                    if (!selectedFile) return;
+                    setIsAnalyzing(true);
+                    try {
+                      const result = await analyzeVideo(selectedFile);
+                      setAnalysisResult(result);
+                    } catch (error) {
+                      console.error("Analysis failed", error);
+                      alert("Analysis failed. Check console.");
+                    } finally {
+                      setIsAnalyzing(false);
+                    }
+                  }}
+                  disabled={!selectedFile || isAnalyzing}
                   className={`px-8 py-4 rounded-sm font-medium text-sm transition-colors ${
-                    selectedFile 
+                    selectedFile && !isAnalyzing
                       ? 'bg-zinc-900 hover:bg-zinc-800 text-white cursor-pointer'
                       : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
                   }`}
                 >
-                  Analyze Processing
+                  {isAnalyzing ? "Processing..." : "Analyze Processing"}
                 </button>
              </div>
+              </>
+            )}
 
           </div>
 
