@@ -126,14 +126,18 @@ async def process_frame(
     )
 
 
-def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 15) -> dict:
+def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 20) -> dict:
     cap = cv2.VideoCapture(tmp_path_str)
     if not cap.isOpened():
         return {"error": "Could not open video file"}
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Calculate sampling stride to cover the whole video
+    stride = max(1, total_frames // max_frames)
+    
     frames_processed = 0
-
     all_landmarks: List = []
     knee_angles: List[float] = []
     hip_angles:  List[float] = []
@@ -141,7 +145,13 @@ def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 15) -> dic
 
     try:
         with PoseService(static_image_mode=False) as pose_svc:
-            while cap.isOpened() and frames_processed < max_frames:
+            # Sample max_frames across the entire video duration
+            for i in range(max_frames):
+                frame_idx = i * stride
+                if frame_idx >= total_frames:
+                    break
+                
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ret, bgr_frame = cap.read()
                 if not ret:
                     break
