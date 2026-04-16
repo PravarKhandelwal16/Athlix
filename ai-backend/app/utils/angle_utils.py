@@ -33,6 +33,7 @@ def _to_array(point: Point3D) -> np.ndarray:
 
 
 def calculate_angle(a: Point3D, b: Point3D, c: Point3D) -> float:
+    """Return the interior angle in degrees at vertex b, formed by vectors b→a and b→c."""
     vec_ba = _to_array(a) - _to_array(b)
     vec_bc = _to_array(c) - _to_array(b)
 
@@ -51,6 +52,7 @@ def calculate_angle_2d(
     b: Tuple[float, float],
     c: Tuple[float, float],
 ) -> float:
+    """2-D variant of calculate_angle — ignores the z axis."""
     return calculate_angle(
         (a[0], a[1], 0.0),
         (b[0], b[1], 0.0),
@@ -105,18 +107,21 @@ def _average(*values: Optional[float]) -> Optional[float]:
 
 
 def compute_knee_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+    """Knee flexion angle (hip→knee→ankle), averaged left and right."""
     left  = _safe_angle(landmarks, "LEFT_HIP",  "LEFT_KNEE",  "LEFT_ANKLE")
     right = _safe_angle(landmarks, "RIGHT_HIP", "RIGHT_KNEE", "RIGHT_ANKLE")
     return _average(left, right)
 
 
 def compute_hip_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+    """Hip flexion angle (shoulder→hip→knee), averaged left and right."""
     left  = _safe_angle(landmarks, "LEFT_SHOULDER",  "LEFT_HIP",  "LEFT_KNEE")
     right = _safe_angle(landmarks, "RIGHT_SHOULDER", "RIGHT_HIP", "RIGHT_KNEE")
     return _average(left, right)
 
 
 def compute_back_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+    """Trunk inclination angle relative to vertical (0° = upright)."""
     ls = _get_point(landmarks, "LEFT_SHOULDER")
     rs = _get_point(landmarks, "RIGHT_SHOULDER")
     lh = _get_point(landmarks, "LEFT_HIP")
@@ -135,6 +140,7 @@ def compute_back_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
         (lh[1] + rh[1]) / 2,
         (lh[2] + rh[2]) / 2,
     )
+    # y decreases upward in normalised image coords, so subtract 1.0 to get a point above the hip
     vertical_ref: Point3D = (mid_hip[0], mid_hip[1] - 1.0, mid_hip[2])
 
     return round(calculate_angle(mid_shoulder, mid_hip, vertical_ref), 4)
@@ -143,6 +149,7 @@ def compute_back_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
 def compute_all_angles(
     landmarks: List[PoseLandmarkItem],
 ) -> Dict[str, Optional[float]]:
+    """Return knee_angle, hip_angle, and back_angle for a single frame."""
     return {
         "knee_angle": compute_knee_angle(landmarks),
         "hip_angle":  compute_hip_angle(landmarks),

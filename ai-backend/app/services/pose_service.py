@@ -19,6 +19,8 @@ _POSE_LANDMARKS = _mp_pose.PoseLandmark
 
 
 class PoseService:
+    """Wraps MediaPipe BlazePose for single-frame and video-stream processing."""
+
     def __init__(
         self,
         static_image_mode: bool = False,
@@ -61,6 +63,7 @@ class PoseService:
 
 
 def detect_pose(image_bytes: bytes) -> PoseDetectionResponse:
+    """Decode image bytes, run BlazePose, compute angles and form flags, and return a structured response."""
     t_start = time.perf_counter()
 
     arr = np.frombuffer(image_bytes, dtype=np.uint8)

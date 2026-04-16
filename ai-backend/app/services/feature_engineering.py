@@ -81,9 +81,11 @@ def _check_knee_valgus(landmarks: List[PoseLandmarkItem], tolerance: float) -> O
     results: List[bool] = []
 
     if left_knee and left_ankle:
+        # Left valgus: knee moves inward (lower x) past ankle
         results.append((left_ankle.x - left_knee.x) > tolerance)
 
     if right_knee and right_ankle:
+        # Right valgus: knee moves inward (higher x) past ankle
         results.append((right_knee.x - right_ankle.x) > tolerance)
 
     return any(results) if results else None
@@ -103,6 +105,7 @@ def _check_insufficient_depth(landmarks: List[PoseLandmarkItem], margin: float) 
 
     results: List[bool] = []
 
+    # y increases downward in normalised image coords; hip must be below knee (higher y)
     if left_hip and left_knee:
         results.append(not (left_hip.y > left_knee.y + margin))
     if right_hip and right_knee:
@@ -179,6 +182,7 @@ def build_feature_vector(frame_index: int, landmarks: List[Landmark]) -> Biomech
 
 
 def predict_risk(features: BiomechanicalFeatures) -> float:
+    # TODO: joblib.load("model/model.pkl") → model.predict(feature_vector)
     return 0.0
 
 

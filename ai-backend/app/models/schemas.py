@@ -112,6 +112,7 @@ class FrameProcessingResponse(BaseModel):
 
 
 class SetSnapshot(BaseModel):
+    """Angle snapshot from one completed set, used to track form over a session."""
     set_index:  int
     timestamp:  Optional[float] = None
     knee_angle: Optional[float] = None
@@ -132,6 +133,7 @@ class FatigueResult(BaseModel):
 
 
 class FeatureVector(BaseModel):
+    """Flat, ML-ready feature vector combining pose angles and fatigue metrics."""
     knee_angle:      Optional[float] = None
     hip_angle:       Optional[float] = None
     back_angle:      Optional[float] = None
