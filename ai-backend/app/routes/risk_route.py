@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any
 
-from app.models.schemas import RiskAssessmentRequest
 from app.services.pipeline import run_pipeline
 
 router = APIRouter(prefix="", tags=["Pipeline"])
