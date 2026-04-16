@@ -5,11 +5,14 @@ from typing import Dict, List, Optional, Tuple
 
 from app.models.schemas import (
     BiomechanicalFeatures,
+    FatigueInput,
+    FatigueResult,
     FormFlags,
     FormThresholds,
     JointAngles,
     Landmark,
     PoseLandmarkItem,
+    SetSnapshot,
 )
 from app.utils.angle_utils import calculate_angle
 
@@ -179,3 +182,86 @@ def build_feature_vector(frame_index: int, landmarks: List[Landmark]) -> Biomech
 def predict_risk(features: BiomechanicalFeatures) -> float:
     # TODO: joblib.load("model/model.pkl") → model.predict(feature_vector)
     return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Fatigue & Load Feature System
+# ---------------------------------------------------------------------------
+
+def _compute_fatigue_score(training_load: float, sleep_hours: float) -> float:
+    """
+    Fatigue score = training_load / sleep_hours.
+    Higher value → more fatigued. Clamped to [0, 100].
+    Formula is intentionally simple; replace with an ML model later.
+    """
+    raw = training_load / sleep_hours
+    return round(min(raw, 100.0), 4)
+
+
+def _compute_recovery_score(training_load: float, sleep_hours: float) -> float:
+    """
+    Recovery score = sleep_hours / training_load, normalised to [0, 1].
+    Higher value → better recovered.
+    """
+    raw = sleep_hours / training_load
+    return round(min(raw, 1.0), 4)
+
+
+def _compute_form_decay_rate(sets: List[SetSnapshot]) -> Optional[float]:
+    """
+    Mean per-set change in back_angle across the session history.
+
+    A positive value means the back angle is increasing (more forward lean) —
+    a classic sign of fatigue-induced form breakdown.
+    Returns None when fewer than 2 sets with a back_angle are provided.
+    """
+    readings = [
+        (s.set_index, s.back_angle)
+        for s in sets
+        if s.back_angle is not None
+    ]
+    if len(readings) < 2:
+        return None
+
+    # Sort by set_index so the delta is always forward-in-time
+    readings.sort(key=lambda t: t[0])
+
+    deltas = [
+        readings[i + 1][1] - readings[i][1]
+        for i in range(len(readings) - 1)
+    ]
+    return round(sum(deltas) / len(deltas), 4)
+
+
+def compute_fatigue_metrics(payload: FatigueInput) -> FatigueResult:
+    """
+    Compute fatigue, recovery, and form-decay metrics from a FatigueInput.
+
+    Parameters
+    ----------
+    payload : FatigueInput
+        training_load, sleep_hours, and optional previous_sets_data.
+
+    Returns
+    -------
+    FatigueResult
+        fatigue_score, recovery_score, form_decay_rate.
+    """
+    fatigue_score  = _compute_fatigue_score(payload.training_load, payload.sleep_hours)
+    recovery_score = _compute_recovery_score(payload.training_load, payload.sleep_hours)
+    form_decay_rate = (
+        _compute_form_decay_rate(payload.previous_sets_data)
+        if payload.previous_sets_data
+        else None
+    )
+
+    logger.info(
+        "Fatigue metrics — load=%.1f sleep=%.1fh fatigue=%.4f recovery=%.4f decay=%s",
+        payload.training_load, payload.sleep_hours,
+        fatigue_score, recovery_score, form_decay_rate,
+    )
+    return FatigueResult(
+        fatigue_score=fatigue_score,
+        recovery_score=recovery_score,
+        form_decay_rate=form_decay_rate,
+    )
