@@ -10,6 +10,7 @@ from typing import List, Optional
 
 import cv2
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.models.schemas import (
     FatigueInput,
@@ -18,7 +19,7 @@ from app.models.schemas import (
 )
 from app.services.feature_engineering import analyze_form, extract_joint_angles, generate_feature_vector
 from app.services.pose_service import PoseService, detect_pose
-from app.services.risk_engine import get_risk_score
+from app.services.pipeline import run_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -125,40 +126,22 @@ async def process_frame(
     )
 
 
-@router.post("/analyze")
-async def analyze_video(file: UploadFile = File(...)):
-    """
-    Analyzes the video by processing up to 15 frames.
-    All outputs are computed from real pose data — ZERO hardcoded values.
-    """
-    logger.info("Video received: %s", file.filename)
 
-    tmp_dir = tempfile.mkdtemp(prefix="analyze_")
-    tmp_path = Path(tmp_dir) / (file.filename or "upload.mp4")
-    cap = None
+
+def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 15) -> dict:
+    cap = cv2.VideoCapture(tmp_path_str)
+    if not cap.isOpened():
+        return {"error": "Could not open video file"}
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    frames_processed = 0
+
+    all_landmarks: List = []
+    knee_angles: List[float] = []
+    hip_angles:  List[float] = []
+    back_angles: List[float] = []
 
     try:
-        # Read asynchronously — does not block the event loop
-        file_bytes = await file.read()
-        tmp_path.write_bytes(file_bytes)
-
-        logger.info("Processing started")
-
-        cap = cv2.VideoCapture(str(tmp_path))
-        if not cap.isOpened():
-            logger.error("Could not open video: %s", file.filename)
-            return {"error": "processing failed", "detail": "Could not open video file"}
-
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        frames_processed = 0
-        max_frames = 15
-
-        # Per-frame angle accumulators — filled from REAL detected landmarks
-        all_landmarks: List = []
-        knee_angles: List[float] = []
-        hip_angles:  List[float] = []
-        back_angles: List[float] = []
-
         with PoseService(static_image_mode=False) as pose_svc:
             while cap.isOpened() and frames_processed < max_frames:
                 ret, bgr_frame = cap.read()
@@ -172,7 +155,6 @@ async def analyze_video(file: UploadFile = File(...)):
                     all_landmarks.append(landmarks)
                     angles = extract_joint_angles(landmarks)
 
-                    # Average bilateral angles where both sides visible
                     if angles.left_knee and angles.right_knee:
                         knee_angles.append((angles.left_knee + angles.right_knee) / 2.0)
                     elif angles.left_knee:
@@ -191,7 +173,48 @@ async def analyze_video(file: UploadFile = File(...)):
                         back_angles.append(angles.back)
 
                 frames_processed += 1
-                logger.info("Frame %d processed", frames_processed)
+    finally:
+        cap.release()
+
+    return {
+        "fps": fps,
+        "frames_processed": frames_processed,
+        "all_landmarks": all_landmarks,
+        "knee_angles": knee_angles,
+        "hip_angles": hip_angles,
+        "back_angles": back_angles,
+    }
+
+@router.post("/analyze")
+async def analyze_video(file: UploadFile = File(...)):
+    """
+    Analyzes the video by processing up to 15 frames.
+    All outputs are computed from real pose data — ZERO hardcoded values.
+    """
+    logger.info("Video received: %s", file.filename)
+
+    tmp_dir = tempfile.mkdtemp(prefix="analyze_")
+    tmp_path = Path(tmp_dir) / (file.filename or "upload.mp4")
+    cap = None
+
+    try:
+        # Read asynchronously — does not block the event loop
+        file_bytes = await file.read()
+        tmp_path.write_bytes(file_bytes)
+
+        logger.info("Processing started")
+        
+        result_dict = await run_in_threadpool(_extract_video_features_sync, str(tmp_path))
+        if "error" in result_dict:
+            logger.error("analysis error: %s", result_dict["error"])
+            return {"error": "processing failed", "detail": result_dict["error"]}
+
+        fps = result_dict["fps"]
+        frames_processed = result_dict["frames_processed"]
+        all_landmarks = result_dict["all_landmarks"]
+        knee_angles = result_dict["knee_angles"]
+        hip_angles = result_dict["hip_angles"]
+        back_angles = result_dict["back_angles"]
 
         if not all_landmarks:
             logger.warning("No pose detected in video: %s", file.filename)
@@ -272,100 +295,32 @@ async def analyze_video(file: UploadFile = File(...)):
         }
         logger.info("Features sent to model: %s", risk_input)
 
-        risk_output    = get_risk_score(risk_input)
-        computed_score = round(max(0.0, 100.0 - risk_output.risk_score), 1)
+        pipeline_result = run_pipeline(risk_input)
+        computed_score = round(max(0.0, 100.0 - pipeline_result.risk_score), 1)
+
+        level_map = {
+            "Low": ("SAFE", "green"),
+            "Medium": ("MODERATE", "yellow"),
+            "High": ("HIGH", "red"),
+        }
+        mapped_level, mapped_color = level_map.get(pipeline_result.risk_level, ("MODERATE", "yellow"))
 
         logger.info(
             "Model prediction — risk_score=%.2f risk_level=%s",
-            risk_output.risk_score, risk_output.risk_level,
+            pipeline_result.risk_score, pipeline_result.risk_level,
         )
         logger.info(
             "Returning response — score=%.1f injury_risk=%.2f reps=%d frames=%d",
-            computed_score, risk_output.risk_score, reps, frames_processed,
+            computed_score, pipeline_result.risk_score, reps, frames_processed,
         )
 
-        # ── Build Movement Risk Index (the UI's main risk display) ────────
-        # Combine form flags into a per-issue risk breakdown
-        form_flag_dict = {
-            "knee_valgus":            form_flags.knee_valgus        or False,
-            "incomplete_depth":       form_flags.insufficient_depth or False,
-            "excessive_forward_lean": form_flags.bad_back_posture   or False,
-            "heel_rise":              False,
-            "lateral_shift":          False,
-        }
-
-        # Risk contribution breakdown (matches what Results.jsx renders)
-        risk_breakdown = []
-        flag_severity_map = {
-            "incomplete_depth":       ("Incomplete Depth",       0.8,  "High"),
-            "knee_valgus":            ("Knee Valgus",            0.5,  "Medium"),
-            "excessive_forward_lean": ("Excessive Forward Lean", 0.5,  "Medium"),
-            "heel_rise":              ("Heel Rise",              0.2,  "Low"),
-            "lateral_shift":          ("Lateral Shift",          0.2,  "Low"),
-        }
-
-        total_risk_contribution = 0.0
-        intensity_mult = round(min((training_load / 10.0) ** 2, 1.0), 2)
-        recovery_mult  = round(max(1.0, 1.0 + (100.0 - recovery_score) / 200.0), 2)
-
-        for flag_key, (issue_name, base_sev, sev_label) in flag_severity_map.items():
-            if form_flag_dict.get(flag_key):
-                contribution = round(base_sev * intensity_mult * recovery_mult, 2)
-                total_risk_contribution += contribution
-                risk_breakdown.append({
-                    "issue":         issue_name,
-                    "flawSeverity":  f"{base_sev:.2f}",
-                    "intensityMult": f"{intensity_mult:.2f}",
-                    "recoveryMult":  f"{recovery_mult:.2f}",
-                    "historyMult":   "1.00",
-                    "contribution":  f"{contribution:.2f}",
-                })
-
-        movement_risk_index = round(min(total_risk_contribution * 35 + risk_output.risk_score * 0.5, 100), 0)
-        risk_label = "High" if movement_risk_index >= 75 else ("Moderate" if movement_risk_index >= 40 else "Low")
-
-        # Explanation insight based on risk level
-        if movement_risk_index >= 75:
-            if recovery_mult > 1.2:
-                explanation_insight = "Elevated risk due to poor recovery state amplifying form fatigue."
-            else:
-                explanation_insight = "Form breakdown under high relative load. Tendon and joint structures are significantly stressed."
-        elif movement_risk_index >= 40:
-            explanation_insight = "Moderate mechanical shifts detected. Monitor load scaling carefully."
-        else:
-            explanation_insight = "Solid movement pattern under acceptable relative load."
-
-        # Velocity estimation from knee angle range of motion
-        knee_range = (max(knee_angles) - min(knee_angles)) if len(knee_angles) > 1 else 20.0
-        movement_velocity = round(knee_range / 100.0 * (duration_s + 0.5), 2)
-        velocity_classification = "Strength" if movement_velocity < 0.5 else ("Power" if movement_velocity > 0.8 else "Hypertrophy")
-
-        # Load score: function of training load, reps, and velocity
-        load_score = round(training_load * max(reps, 1) * (1.0 if velocity_classification == "Hypertrophy" else 0.8 if velocity_classification == "Strength" else 1.2), 1)
-
         return {
-            "score":                   computed_score,
-            "injury_risk":             risk_output.risk_score,
-            "risk_level":              risk_output.risk_level,
-            "reps":                    reps,
-            "feature_vector":          feature_vector,
-            "form_flags":              form_flag_dict,
-            # Movement Risk Index section (Results.jsx)
-            "movementRiskIndex":       int(movement_risk_index),
-            "riskLabel":               risk_label,
-            "riskBreakdown":           risk_breakdown,
-            "explanationInsight":      explanation_insight,
-            # Intensity Profile section (Results.jsx)
-            "movementVelocity":        f"{movement_velocity:.2f}",
-            "velocityClassification":  velocity_classification,
-            "loadScore":               f"{load_score:.1f}",
-            # Key issues for Highlights section
-            "keyIssues": [
-                {"id": i + 1, "issue": rb["issue"], "severity": sev_label, "detail": _ISSUE_DETAILS.get(rb["issue"], "")}
-                for i, rb in enumerate(risk_breakdown)
-            ] if risk_breakdown else [
-                {"id": 1, "issue": "Good Form", "severity": "Low", "detail": "No significant mechanical deviations detected."}
-            ],
+            "score": computed_score,
+            "risk_level": mapped_level,
+            "risk_color": mapped_color,
+            "injury_reasons": pipeline_result.reasons,
+            "recommendations": pipeline_result.recommendations,
+            "feature_vector": feature_vector
         }
 
 
@@ -373,6 +328,4 @@ async def analyze_video(file: UploadFile = File(...)):
         logger.error("analyze_video processing failed: %s", str(exc), exc_info=True)
         return {"error": "processing failed"}
     finally:
-        if cap is not None:
-            cap.release()
         shutil.rmtree(tmp_dir, ignore_errors=True)

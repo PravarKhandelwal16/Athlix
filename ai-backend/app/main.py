@@ -10,7 +10,6 @@ from app.models.schemas import HealthResponse
 from app.routes.fatigue_route  import router as fatigue_router
 from app.routes.pose_route     import router as pose_router
 from app.routes.process_route  import router as process_router
-from app.routes.risk_route     import router as risk_router
 from app.routes.upload_route   import router as upload_router
 
 logging.basicConfig(
@@ -45,7 +44,6 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(fatigue_router)
-    app.include_router(risk_router)
     app.include_router(process_router)
     app.include_router(pose_router)
     app.include_router(upload_router)
@@ -60,11 +58,9 @@ def create_app() -> FastAPI:
             _ML_READY = True
             logger.info("ML models and scaler loaded and cached successfully.")
         except Exception as exc:
-            logger.warning(
-                "ML models could not be pre-loaded on startup: %s. "
-                "Lazy loading will be used on first request.",
-                exc,
-            )
+            logger.critical("ML models could not be loaded: %s.", exc)
+            import sys
+            sys.exit(1)
 
     @app.on_event("shutdown")
     async def on_shutdown() -> None:
