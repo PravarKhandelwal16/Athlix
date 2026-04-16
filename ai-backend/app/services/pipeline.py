@@ -28,6 +28,8 @@ class PipelineResult:
     explainer_mode:  str
     latency_ms:      float
     input_features:  dict
+    frame_angles:    list = field(default_factory=list)
+    angle_stats:     dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +45,8 @@ class PipelineResult:
             "explainer_mode":  self.explainer_mode,
             "latency_ms":      round(self.latency_ms, 1),
             "input_features":  self.input_features,
+            "frame_angles":    self.frame_angles,
+            "angle_stats":     self.angle_stats,
         }
 
     def __str__(self) -> str:
@@ -102,19 +106,143 @@ class PipelineResult:
         return "\n".join(lines)
 
 
+_RF_RISK_MODEL = None
+
+def _get_rf_risk_prob(features: dict) -> float:
+    global _RF_RISK_MODEL
+    import numpy as np
+    from sklearn.ensemble import RandomForestClassifier
+
+    if _RF_RISK_MODEL is None:
+        X = []
+        y = []
+        for _ in range(500):
+            k_std = np.random.uniform(0, 30)
+            h_std = np.random.uniform(0, 30)
+            b_std = np.random.uniform(0, 30)
+            dep = np.random.uniform(40, 140)
+            smo = np.random.uniform(0, 20)
+            fat = np.random.uniform(0, 10)
+            rec = np.random.uniform(0, 100)
+
+            is_risky = 1 if (k_std > 15 or h_std > 15 or b_std > 15 or dep < 70) else 0
+            X.append([k_std, h_std, b_std, dep, smo, fat, rec])
+            y.append(is_risky)
+
+        _RF_RISK_MODEL = RandomForestClassifier(n_estimators=50, random_state=42)
+        _RF_RISK_MODEL.fit(X, y)
+
+    x_input = [[
+        features.get('knee_std', 10.0),
+        features.get('hip_std', 10.0),
+        features.get('back_std', 10.0),
+        features.get('depth_score', 90.0),
+        features.get('smoothness_score', 10.0),
+        features.get('fatigue_index', 5.0),
+        features.get('recovery_score', 50.0)
+    ]]
+    prob = _RF_RISK_MODEL.predict_proba(x_input)[0]
+    if len(prob) > 1:
+        return float(prob[1] * 100.0)
+    return float(prob[0] * 100.0) if _RF_RISK_MODEL.classes_[0] == 1 else 0.0
+
+
 def run_pipeline(
     input_features: dict,
     model_name: str = "xgboost",
 ) -> PipelineResult:
     t0 = time.perf_counter()
 
+    import numpy as np
+
     validated = _validate_input(input_features)
+    angle_stats = {}
+
+    from app.services.pose_service import FRAME_ANGLES_HISTORY
+    if FRAME_ANGLES_HISTORY:
+        knee_angles = [f["knee"] for f in FRAME_ANGLES_HISTORY if "knee" in f]
+        hip_angles = [f["hip"] for f in FRAME_ANGLES_HISTORY if "hip" in f]
+        back_angles = [f["back"] for f in FRAME_ANGLES_HISTORY if "back" in f]
+
+        if len(knee_angles) > 1:
+            third = max(len(knee_angles) // 3, 1)
+            early_mean = sum(knee_angles[:third]) / third
+            late_mean = sum(knee_angles[-third:]) / third
+            decay_ratio = abs(late_mean - early_mean) / (early_mean + 1e-6)
+            fatigue_index = round(min(decay_ratio * 10.0, 10.0), 4)
+            recovery_score = round(max(100.0 - fatigue_index * 8.0, 0.0), 2)
+            duration_s = len(FRAME_ANGLES_HISTORY) / 30.0
+            training_load = round(min(1.0 + duration_s * 0.5, 10.0), 2)
+            
+            validated["fatigue_index"] = fatigue_index
+            validated["recovery_score"] = recovery_score
+            validated["training_load"] = training_load
+
+        if len(knee_angles) > 0:
+            arr = np.array(knee_angles)
+            knee_min = round(float(np.min(arr)), 2)
+            knee_std = round(float(np.std(arr)), 2)
+            
+            smoothness_score = round(1.0 / (knee_std + 1e-6), 2)
+            
+            # calculate custom form_score (0-100) where higher means WORSE form
+            avg_penalty = sum(20 if a < 60 else (10 if a < 90 else 0) for a in knee_angles) / len(knee_angles)
+            base_badness = 0.0
+            std_penalty = knee_std * 2.0
+            smoothness_reduction = min(smoothness_score * 5.0, 15.0)
+            
+            form_score = base_badness + std_penalty + avg_penalty - smoothness_reduction
+            form_score = round(max(0.0, min(100.0, form_score)), 2)
+            validated["form_score"] = form_score
+
+            angle_stats.update({
+                "knee_mean": round(float(np.mean(arr)), 2),
+                "knee_std": knee_std,
+                "knee_min": knee_min,
+                "knee_max": round(float(np.max(arr)), 2),
+                "depth_score": knee_min,
+                "smoothness_score": smoothness_score,
+                "form_score": form_score,
+            })
+        if len(hip_angles) > 0:
+            arr = np.array(hip_angles)
+            angle_stats.update({
+                "hip_mean": round(float(np.mean(arr)), 2),
+                "hip_std": round(float(np.std(arr)), 2),
+                "hip_min": round(float(np.min(arr)), 2),
+                "hip_max": round(float(np.max(arr)), 2),
+            })
+        if len(back_angles) > 0:
+            arr = np.array(back_angles)
+            angle_stats.update({
+                "back_mean": round(float(np.mean(arr)), 2),
+                "back_std": round(float(np.std(arr)), 2),
+                "back_min": round(float(np.min(arr)), 2),
+                "back_max": round(float(np.max(arr)), 2),
+            })
 
     risk: RiskOutput = get_risk_score(validated, model_name=model_name)
     explanation: Explanation = explain_prediction(validated, model_name=model_name)
     coaching: CoachingReport = get_recommendations(validated)
 
     latency_ms = (time.perf_counter() - t0) * 1000
+
+    from app.services.pose_service import FRAME_ANGLES_HISTORY
+
+    rf_features = {**validated, **angle_stats}
+    model_prob = _get_rf_risk_prob(rf_features)
+    angle_stats["rf_risk_prob"] = round(model_prob, 2)
+    
+    import numpy as np
+    final_risk = 0.6 * model_prob + 0.4 * risk.risk_score
+    final_risk = float(np.clip(final_risk, 0.0, 100.0))
+    risk.risk_score = round(final_risk, 2)
+    
+    print("\n--- [PIPELINE OUTPUT SUMMARY] ---")
+    print(f"Angles STD -> knee: {angle_stats.get('knee_std', 0.0)}, hip: {angle_stats.get('hip_std', 0.0)}, back: {angle_stats.get('back_std', 0.0)}")
+    print(f"Form score -> {angle_stats.get('form_score', 0.0)}")
+    print(f"Final risk -> {final_risk:.2f}")
+    print("---------------------------------\n")
 
     return PipelineResult(
         risk_score      = risk.risk_score,
@@ -129,7 +257,10 @@ def run_pipeline(
         explainer_mode  = explanation.mode,
         latency_ms      = latency_ms,
         input_features  = validated,
+        frame_angles    = FRAME_ANGLES_HISTORY.copy() if FRAME_ANGLES_HISTORY else [],
+        angle_stats     = angle_stats,
     )
+
 
 
 if __name__ == "__main__":

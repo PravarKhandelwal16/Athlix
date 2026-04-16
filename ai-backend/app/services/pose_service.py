@@ -14,6 +14,8 @@ from app.utils.angle_utils import calculate_angle, compute_all_angles
 
 logger = logging.getLogger(__name__)
 
+FRAME_ANGLES_HISTORY = []
+
 try:
     _mp_pose        = mp.solutions.pose
     _POSE_LANDMARKS = _mp_pose.PoseLandmark
@@ -220,6 +222,9 @@ def analyze_video_form(video_path: str) -> float:
     """
     import statistics
 
+    global FRAME_ANGLES_HISTORY
+    FRAME_ANGLES_HISTORY = []
+
     logger.info("analyze_video_form: opening '%s'", video_path)
     angles: List[float] = []
     cap = cv2.VideoCapture(video_path)
@@ -250,19 +255,40 @@ def analyze_video_form(video_path: str) -> float:
                 hip   = lm_map.get("LEFT_HIP")
                 knee  = lm_map.get("LEFT_KNEE")
                 ankle = lm_map.get("LEFT_ANKLE")
+                shoulder = lm_map.get("LEFT_SHOULDER")
 
-                if not (hip and knee and ankle):
+                if not (hip and knee and ankle and shoulder):
                     continue
-                if any(lm.visibility < 0.4 for lm in (hip, knee, ankle)):
+                if any(lm.visibility < 0.4 for lm in (hip, knee, ankle, shoulder)):
                     continue
 
                 # Knee flexion angle: the angle at the knee vertex
-                angle = calculate_angle(
+                angle_knee = calculate_angle(
                     (hip.x,   hip.y,   hip.z),
                     (knee.x,  knee.y,  knee.z),
                     (ankle.x, ankle.y, ankle.z),
                 )
-                angles.append(angle)
+                
+                angle_hip = calculate_angle(
+                    (shoulder.x, shoulder.y, shoulder.z),
+                    (hip.x,      hip.y,      hip.z),
+                    (knee.x,     knee.y,     knee.z),
+                )
+                
+                angle_back = calculate_angle(
+                    (shoulder.x, shoulder.y, shoulder.z),
+                    (hip.x,      hip.y,      hip.z),
+                    (knee.x,     knee.y,     knee.z),
+                )
+                
+                FRAME_ANGLES_HISTORY.append({
+                    "frame": frames_read,
+                    "knee": angle_knee,
+                    "hip": angle_hip,
+                    "back": angle_back
+                })
+                
+                angles.append(angle_knee)
     finally:
         cap.release()
         logger.info("analyze_video_form: cap released after %d frames", frames_read)

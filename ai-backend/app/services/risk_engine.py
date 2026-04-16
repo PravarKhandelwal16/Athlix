@@ -196,17 +196,23 @@ def get_risk_score(
     #   training_load: 1-10         → × 10
     #   recovery_score: 0-100       → already in range
     # ------------------------------------------------------------------
-    fd = features["form_decay"]    * 100.0   # 0-100
+    fs = features.get("form_score", features["form_decay"] * 100.0)
     fi = features["fatigue_index"] * 10.0    # 0-100
     ld = features["training_load"] * 10.0    # 0-100
-    rs = features["recovery_score"]           # 0-100
+    rs = features["recovery_score"]          # 0-100
 
     direct_score = (
-        0.50 * fd +
+        0.50 * fs +
         0.25 * fi +
         0.15 * ld +
         0.10 * (100.0 - rs)
     )
+    
+    if fs > 60:
+        direct_score *= 1.2
+    if fs < 30:
+        direct_score *= 0.8
+        
     direct_score = float(np.clip(direct_score, 0.0, 100.0))
 
     # Blend: 35% ML model (generalisation) + 65% direct formula (form sensitivity)
@@ -218,6 +224,10 @@ def get_risk_score(
     print(f"[DEBUG] blended_score   : {blended_score:.2f}")
 
     final_score, delta, flags = _apply_fusion(blended_score, features)
+    
+    import random
+    final_score += random.uniform(-3.0, 3.0)
+    final_score = float(np.clip(final_score, 0.0, 100.0))
 
     print(f"[DEBUG] final risk      : {final_score:.2f}")
 
