@@ -126,14 +126,37 @@ function ActivityRing({ score }) {
 function Results() {
   const navigate = useNavigate();
   const [mockData, setMockData] = useState(null);
+  const [noResults, setNoResults] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       const data = await api.getAnalysisResults();
-      setMockData(data);
+      if (data) {
+        setMockData(data);
+      } else {
+        setNoResults(true);
+      }
     };
     fetchData();
   }, []);
+
+  if (noResults) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="text-6xl">📊</div>
+          <h2 className="text-2xl font-bold text-white">No Analysis Found</h2>
+          <p className="text-zinc-400 max-w-sm">Upload a video first to see your movement analysis results.</p>
+          <button
+            onClick={() => navigate('/upload')}
+            className="px-6 py-3 bg-[#32ade6] text-white font-bold rounded-2xl hover:bg-[#2b9fd4] transition"
+          >
+            Upload Video
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!mockData) {
     return (
@@ -147,7 +170,7 @@ function Results() {
 
   const maxScore = Math.max(...mockData.decayData.map(d => d.score));
   const dropIdx = mockData.decayData.findIndex((d, i) => i > 0 && mockData.decayData[i - 1].score - d.score > 10);
-  const dropRep = dropIdx >= 0 ? mockData.decayData[dropIdx].rep : 5;
+  const dropRep = dropIdx >= 0 ? mockData.decayData[dropIdx].rep : mockData.decayData.length;
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-[#32ade6] selection:text-white pb-24">
@@ -295,8 +318,16 @@ function Results() {
                   <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 </div>
                 <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Effort Score</div>
-                <div className="text-4xl font-black text-white">{mockData.loadScore}</div>
-                <div className="text-xs text-zinc-400 mt-1 font-medium">Overall Effort</div>
+                <div className="text-4xl font-black text-white flex items-baseline gap-1">
+                  {mockData.loadScore} <span className="text-lg text-zinc-500 font-bold">/ 20</span>
+                </div>
+                <div className="text-xs text-zinc-400 mt-1 font-medium">
+                  {parseFloat(mockData.loadScore) <= 7 
+                    ? 'Low effort' 
+                    : parseFloat(mockData.loadScore) <= 14 
+                      ? 'Moderate effort' 
+                      : 'High effort'}
+                </div>
               </div>
             </div>
 
@@ -387,8 +418,42 @@ function Results() {
                     <line x1="25" y1="12" x2="90" y2="48" stroke="#ff3b30" strokeWidth="3" opacity="0.8" strokeLinecap="round" />
                     <line x1="90" y1="48" x2="35" y2="95" stroke="#ff3b30" strokeWidth="3" opacity="0.8" strokeLinecap="round" />
                   </svg>
-                  <div className="absolute top-[35%] -right-12 bg-[#ff3b30] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                    DEV 12°
+                  
+                  {/* Dynamic Simple Body-Part Feedback */}
+                  <div className="absolute inset-[-50px] pointer-events-none z-20">
+                    {mockData.keyIssues?.slice(0, 2).map((issue, idx) => {
+                      let simpleLabel = issue.issue;
+                      let simpleFix = "Focus on control";
+                      const text = (issue.issue + " " + (issue.detail || '')).toLowerCase();
+                      
+                      if (text.includes("knee") || text.includes("valgus")) {
+                        simpleLabel = "Knees not stable";
+                        simpleFix = "Push knees outward";
+                      } else if (text.includes("back") || text.includes("lean") || text.includes("posture") || text.includes("forward")) {
+                        simpleLabel = "Back leaning too forward";
+                        simpleFix = "Keep chest upright";
+                      } else if (text.includes("depth") || text.includes("low")) {
+                        simpleLabel = "Hips not low enough";
+                        simpleFix = "Drop below parallel";
+                      } else if (text.includes("ascent") || text.includes("descent")) {
+                        simpleLabel = "Core unstable during lift";
+                        simpleFix = "Brace your core";
+                      } else {
+                        simpleLabel = "Form breaking down";
+                        simpleFix = "Lower the weight";
+                      }
+
+                      return (
+                        <div key={idx} className={`absolute ${idx === 0 ? 'top-[20%] -left-10' : 'bottom-[20%] -right-10'} flex flex-col items-center gap-1 z-30`}>
+                          <div className="bg-[#ff3b30] text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg text-center leading-tight whitespace-nowrap">
+                            {simpleLabel}
+                          </div>
+                          <div className="bg-[#1c1c1e] text-[#ff3b30] text-[9px] font-bold px-2 py-0.5 rounded-full border border-[#ff3b30]/30 text-center whitespace-nowrap shadow-md">
+                            → {simpleFix}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-[#ff3b30]/30">

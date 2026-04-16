@@ -177,7 +177,7 @@ function Upload() {
                 <span className="text-white mr-4">02 //</span> Select Protocol
               </h2>
               <div className="grid sm:grid-cols-3 gap-px bg-zinc-900 border border-zinc-900">
-                {Object.entries(EXERCISE_CONFIGS).map(([key, cfg]) => (
+                {Object.entries(EXERCISE_CONFIGS).filter(([key]) => key !== 'sit_to_stand').map(([key, cfg]) => (
                   <div
                     key={key}
                     onClick={() => setMovementType(key)}
