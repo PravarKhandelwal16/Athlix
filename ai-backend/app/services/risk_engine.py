@@ -217,17 +217,19 @@ def get_risk_score(
     ld = features["training_load"] * 10.0    # 0-100
     rs = features["recovery_score"]          # 0-100
 
+    # Blended scoring: form_decay is important but heavily weighted towards 
+    # actual measured deviations (fs).
     direct_score = (
-        0.50 * fs +
+        0.40 * fs +
         0.25 * fi +
         0.15 * ld +
-        0.10 * (100.0 - rs)
+        0.20 * (100.0 - rs)
     )
     
-    if fs > 60:
-        direct_score *= 1.3
-    elif fs < 30:
-        direct_score *= 0.7
+    if fs > 75:
+        direct_score *= 1.15
+    elif fs < 25:
+        direct_score *= 0.85
         
     direct_score = float(np.clip(direct_score, 0.0, 100.0))
 

@@ -156,10 +156,14 @@ def run_pipeline(
     import numpy as np
 
     validated = _validate_input(input_features)
-    angle_stats = {}
+    angle_stats = {
+        "knee_std": input_features.get("knee_std", 0.0),
+        "form_score": input_features.get("form_score", 0.0),
+    }
 
+    # Only look at history if features weren't already calculated by the caller
     from app.services.pose_service import FRAME_ANGLES_HISTORY
-    if FRAME_ANGLES_HISTORY:
+    if FRAME_ANGLES_HISTORY and "form_score" not in input_features:
         knee_angles = [f["knee"] for f in FRAME_ANGLES_HISTORY if "knee" in f]
         hip_angles = [f["hip"] for f in FRAME_ANGLES_HISTORY if "hip" in f]
         back_angles = [f["back"] for f in FRAME_ANGLES_HISTORY if "back" in f]

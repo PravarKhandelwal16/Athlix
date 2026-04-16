@@ -195,12 +195,15 @@ async def analyze_video(file: UploadFile = File(...)):
 
     tmp_dir = tempfile.mkdtemp(prefix="analyze_")
     tmp_path = Path(tmp_dir) / (file.filename or "upload.mp4")
-    cap = None
 
     try:
         # Read asynchronously — does not block the event loop
         file_bytes = await file.read()
         tmp_path.write_bytes(file_bytes)
+
+        # ── Step 0: Clear global history to prevent state leakage between runs ─
+        import app.services.pose_service as pose_service
+        pose_service.FRAME_ANGLES_HISTORY = []
 
         logger.info("Processing started")
         
@@ -241,8 +244,13 @@ async def analyze_video(file: UploadFile = File(...)):
 
         # form_decay: knee angle variance normalised to 0-1
         # High variance → unstable mechanics → higher decay
+        # Increase divisor (60->120) to make it less sensitive to per-frame jitter
         knee_std   = statistics.stdev(knee_angles) if len(knee_angles) > 1 else 0.0
-        form_decay = round(min(knee_std / 60.0, 1.0), 4)
+        form_decay = round(min(knee_std / 120.0, 1.0), 4)
+        
+        # form_score: aggregate "badness" metric for the risk engine
+        avg_penalty = sum(15 if a < 60 else (8 if a < 90 else 0) for a in knee_angles) / len(knee_angles)
+        form_score = round(min(max(knee_std * 1.5 + avg_penalty, 0.0), 100.0), 2)
 
         # fatigue_index: compare early vs late knee angles
         # If later frames show more extreme angles, fatigue is higher
@@ -285,13 +293,14 @@ async def analyze_video(file: UploadFile = File(...)):
         
         logger.info("Processing new video — feature_vector: %s", feature_vector)
 
-        # ML model receives only its trained 5 features
+        # ML model receives only its trained 5 features + form_score
         risk_input = {
             "training_load":   training_load,
             "recovery_score":  recovery_score,
             "fatigue_index":   fatigue_index,
             "form_decay":      form_decay,
             "previous_injury": 0,
+            "form_score":      form_score,
         }
         logger.info("Features sent to model: %s", risk_input)
 

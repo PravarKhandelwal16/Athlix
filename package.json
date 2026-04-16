@@ -1,0 +1,15 @@
+{
+  "name": "athlix-root",
+  "version": "1.0.0",
+  "description": "Root management for Athlix Biomechanical Pipeline",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd ai-backend && ..\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "setup": "powershell -ExecutionPolicy Bypass -File ./setup_env.ps1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

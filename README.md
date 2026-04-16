@@ -1,59 +1,72 @@
-# Athlix — AI Injury Prediction System
+# Athlix — AI Biomechanical Analysis Pipeline
 
-Athlix is an advanced AI-powered biomechanical analysis system designed to predict and prevent athletic injuries. The application evaluates an athlete's physical form during structural exercises (like squats) or dynamic movements (like bowling), utilizing a powerful synergy of MediaPipe computer vision, custom biomechanics heuristics, and XGBoost machine learning to produce interactive, immediate, and actionable risk assessments.
-
-## 🏗️ Architecture
-
-The system is decoupled into an ML-heavy API backend and a lightweight, responsive React frontend.
-
-- **`ai-backend/`**: A stateless **FastAPI** Python application. It handles image parsing safely, calls MediaPipe for anatomical point tracking, runs heuristic validation against physical laws, and funnels data through structured ML models (XGBoost/SciKitLearn) infused with global explainability metrics (SHAP).
-- **`frontend/`**: A sleek **React + Vite** single-page application built with modern web aesthetics in mind (Tailwind CSS). This serves as the athlete or coach's dashboard to upload media, view generated coaching points, and observe biomechanical risk summaries.
+Athlix is an advanced AI-powered biomechanical analysis system designed to predict and prevent athletic injuries. The application evaluates movement quality during structural exercises (like squats) or dynamic movements, utilizing a synergy of **MediaPipe** computer vision, custom biomechanics heuristics, and **XGBoost/Random Forest** models to produce immediate, actionable risk assessments.
 
 ---
 
-## 🚀 Quick Setup Guide
+## 🏗️ Project Architecture
 
-### 1. Backend Installation (FastAPI)
-The backend expects Python 3.10+ and houses heavy computational packages alongside its web server logic.
+The system is decoupled into an ML-heavy API backend and a professional React dashboard.
 
-```bash
-# 1. Provide the model dependencies
-pip install -r requirements.txt
+- **Root**: Project orchestration and unified execution environment.
+- **`ai-backend/`**: A **FastAPI** application handling pose detection, joint angle extraction, and ML-driven risk scoring.
+- **`frontend/`**: A **React + Vite** dashboard for uploading media and viewing interactive coaching reports.
 
-# 2. Navigate to the backend directory
-cd ai-backend
+---
 
-# 3. CRITICAL: Train and serialize the initial Baseline ML models
-python app/services/train_models.py
+## 🚀 Quick Start (Unified Flow)
 
-# 4. Start the ASGI Production Server
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+The easiest way to run the entire stack is using the root management scripts.
+
+### 1. Initial Setup
+Ensure you have **Node.js** and **Python 3.10+** installed. From the root directory, run:
+
+```powershell
+# Create virtual environment and install all dependencies
+npm run setup
 ```
-*The API should now be routing logic actively on `http://localhost:8000/docs`.*
 
-### 2. Frontend Installation (React)
-Open a separate secondary terminal root.
+### 2. Launch the Application
+Start both the FastAPI backend and the React frontend concurrently:
 
-```bash
-# 1. Navigate to the frontend directory
-cd frontend
-
-# 2. Install all Node Modules
-npm install
-
-# 3. Spin up the Vite Dev Server
+```powershell
+# Starts backend on :8000 and frontend on :5173
 npm run dev
 ```
-*The application interface will gracefully load on `http://localhost:5173/`.*
 
 ---
 
-## 🎯 Usage
+## 🛠️ Manual Configuration (Optional)
 
-1. Open your browser to `http://localhost:5173/`.
-2. Click **Start Upload** to navigate to the analysis module.
-3. Select an evaluation context (e.g. "Squat") for correct heuristic processing.
-4. Drag-and-drop or select an `.mp4` video (or supported image frame) of the athletic movement. Ensure the movement hits the fundamental rules (direct side profile, fully illuminated, solitary isolation).
-5. Press **Analyze**. The payload is sent down a custom multipart pipeline to the `http://localhost:8000/analyze` route.
-6. The Backend evaluates fatigue, tracks multi-joint symmetry, grades deviations mathematically using regression modeling, evaluates risk layers, and returns a detailed `PipelineResult`.
-7. Enjoy your fully documented **Coaching Report** alongside your computed relative **Risk Level**.
+### Backend (Python)
+If you prefer managing the backend manually:
+```bash
+cd ai-backend
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+*API docs available at `http://localhost:8000/docs`.*
+
+### Frontend (Node)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 🎯 Usage Workflow
+
+1. Open `http://localhost:5173/`.
+2. Navigate to **Start Analysis**.
+3. Select your exercise protocol (e.g., "Back Squat").
+4. Upload a video (`.mp4`, `.mov`) or image.
+5. Review the **Movement Risk Index**, **Form Decay** charts, and **Coaching Plan**.
+
+---
+
+## ⚙️ Core Technologies
+- **Computer Vision**: MediaPipe BlazePose
+- **Machine Learning**: XGBoost, Scikit-Learn (Random Forest Fusion)
+- **Backend**: FastAPI, OpenCV, NumPy
+- **Frontend**: React, Vite, Tailwind CSS, Framer Motion
