@@ -27,7 +27,7 @@ router = APIRouter(prefix="/upload", tags=["Upload & Processing"])
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/x-msvideo", "video/avi"}
-_MAX_VIDEO_FRAMES = 300
+_MAX_VIDEO_FRAMES = 15  # Hard cap — never process more than this to avoid blocking
 
 
 def _validate_content_type(file: UploadFile, allowed: set[str]) -> None:
@@ -117,42 +117,46 @@ async def upload_video(
             )
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        logger.info("Video opened: %d total frames — %s", total_frames, file.filename)
+        logger.info("Video received: %s — %d total frames (capped at %d)", file.filename, total_frames, _MAX_VIDEO_FRAMES)
 
-        with PoseService(static_image_mode=False) as pose_svc:
-            frame_idx = 0
-            detected  = 0
+        try:
+            with PoseService(static_image_mode=False) as pose_svc:
+                frame_idx = 0
+                detected  = 0
+                logger.info("Processing started")
 
-            while cap.isOpened() and frame_idx < _MAX_VIDEO_FRAMES:
-                ret, bgr_frame = cap.read()
-                if not ret:
-                    break
+                while cap.isOpened() and frame_idx < _MAX_VIDEO_FRAMES:
+                    ret, bgr_frame = cap.read()
+                    if not ret:
+                        break
 
-                landmarks = pose_svc.process_frame(_bgr_to_rgb(bgr_frame))
-                pose_detected = landmarks is not None
-                features: BiomechanicalFeatures | None = None
-                error_msg: str | None = None
+                    landmarks = pose_svc.process_frame(_bgr_to_rgb(bgr_frame))
+                    pose_detected = landmarks is not None
+                    features: BiomechanicalFeatures | None = None
+                    error_msg: str | None = None
 
-                if pose_detected:
-                    detected += 1
-                    try:
-                        features = build_feature_vector(frame_index=frame_idx, landmarks=landmarks)
-                    except Exception as exc:
-                        logger.warning("Feature extraction failed at frame %d: %s", frame_idx, exc)
-                        error_msg = f"Feature extraction error: {exc}"
-                else:
-                    error_msg = "No pose detected."
+                    if pose_detected:
+                        detected += 1
+                        try:
+                            features = build_feature_vector(frame_index=frame_idx, landmarks=landmarks)
+                        except Exception as exc:
+                            logger.warning("Feature extraction failed at frame %d: %s", frame_idx, exc)
+                            error_msg = f"Feature extraction error: {exc}"
+                    else:
+                        error_msg = "No pose detected."
 
-                frame_results.append(FrameResult(
-                    frame_index=frame_idx,
-                    pose_detected=pose_detected,
-                    landmarks=landmarks,
-                    features=features,
-                    error_message=error_msg,
-                ))
-                frame_idx += 1
-
-        cap.release()
+                    frame_results.append(FrameResult(
+                        frame_index=frame_idx,
+                        pose_detected=pose_detected,
+                        landmarks=landmarks,
+                        features=features,
+                        error_message=error_msg,
+                    ))
+                    frame_idx += 1
+                    logger.info("Frame %d processed", frame_idx)
+        finally:
+            cap.release()
+            logger.info("Video cap released after %d frames", frame_idx if 'frame_idx' in dir() else 0)
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
