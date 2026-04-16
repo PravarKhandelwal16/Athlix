@@ -258,6 +258,46 @@ function Results() {
           </div>
         </FadeSection>
 
+        {/* ─── Personalized Intensity Load (Derived) ───────────── */}
+        <FadeSection delay={150}>
+          <div className="bg-[#1c1c1e] rounded-[32px] p-8 md:p-10 flex flex-col md:flex-row gap-8 items-center border border-white/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-[#ffea00] to-[#ff3b30]" />
+            
+            <div className="flex-1 shrink-0 text-center md:text-left">
+              <h3 className="text-xl font-bold tracking-tight mb-2">Kinematic Load Context</h3>
+              <p className="text-zinc-400 text-sm font-medium leading-relaxed mb-6">
+                {mockData.loadInterpretation || "Form evaluated under baseline relative loading."}
+              </p>
+              
+              <div className="flex gap-4 max-w-sm mx-auto md:mx-0">
+                <div className="flex-1 bg-black/40 rounded-xl p-4 border border-white/5">
+                  <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Session Weight</div>
+                  <div className="text-xl font-bold text-white">{mockData.weightUsed || 100}kg</div>
+                </div>
+                <div className="flex-1 bg-black/40 rounded-xl p-4 border border-white/5">
+                  <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Athlete Max PR</div>
+                  <div className="text-xl font-bold text-white">{mockData.maxPR || 140}kg</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center bg-black/40 rounded-[24px] p-6 min-w-[200px] border border-white/5 shadow-2xl">
+              <div className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-2">Relative Load</div>
+              <div className="text-4xl font-black text-white flex items-baseline gap-1">
+                {mockData.relativePct || "71"} <span className="text-lg text-zinc-500 uppercase">%</span>
+              </div>
+              <div className={`mt-3 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${
+                mockData.intensityBand === 'MAXIMAL' ? 'text-[#ff3b30] bg-[#ff3b30]/10' :
+                mockData.intensityBand === 'HIGH' ? 'text-[#ff9f0a] bg-[#ff9f0a]/10' :
+                mockData.intensityBand === 'LOW' ? 'text-[#32ade6] bg-[#32ade6]/10' :
+                'text-[#34c759] bg-[#34c759]/10'
+              }`}>
+                {mockData.intensityBand || "MODERATE"} LOAD
+              </div>
+            </div>
+          </div>
+        </FadeSection>
+
         {/* ─── Highlights / Structural Flaws (List layout) ───────── */}
         <FadeSection delay={200}>
           <div className="bg-[#1c1c1e] rounded-[32px] p-8">

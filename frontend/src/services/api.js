@@ -9,7 +9,12 @@ export const api = {
     // Simulate a brief network delay
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve(mockAnalysisData);
+        const cached = localStorage.getItem('temp_analysis');
+        if (cached) {
+          resolve(JSON.parse(cached));
+        } else {
+          resolve(mockAnalysisData);
+        }
       }, 400);
     });
   }
