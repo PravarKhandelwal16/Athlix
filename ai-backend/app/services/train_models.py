@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 
@@ -27,13 +28,15 @@ MODEL_DIR   = os.path.join(_BACKEND_DIR, "data")
 
 def prepare_data(
     n_samples: int = 500,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, MinMaxScaler]:
     raw    = generate_raw_dataset(n_samples=n_samples)
     eng    = engineer_features(raw)
-    scaled, _ = scale_features(eng)
+    scaled, scaler = scale_features(eng)
     X = scaled.drop(columns=[TARGET_COL])
     y = scaled[TARGET_COL]
-    return train_test_split(X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=TEST_SIZE, random_state=RANDOM_SEED)
+    return X_train, X_test, y_train, y_test, scaler
 
 
 def build_random_forest() -> RandomForestRegressor:
@@ -97,7 +100,7 @@ def save_model(model, filename: str) -> str:
 
 
 if __name__ == "__main__":
-    X_train, X_test, y_train, y_test = prepare_data(n_samples=500)
+    X_train, X_test, y_train, y_test, scaler = prepare_data(n_samples=500)
 
     rf_model  = train_model(build_random_forest(), X_train, y_train)
     xgb_model = train_model(build_xgboost(), X_train, y_train)
@@ -107,3 +110,5 @@ if __name__ == "__main__":
 
     rf_path  = save_model(rf_model,  "random_forest.pkl")
     xgb_path = save_model(xgb_model, "xgboost.pkl")
+    scaler_path  = save_model(scaler, "scaler.pkl")
+    print(f"Models and scaler saved in {MODEL_DIR}")

@@ -12,10 +12,7 @@ _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
 _BACKEND_DIR  = os.path.abspath(os.path.join(_SERVICES_DIR, "..", ".."))
 _DATA_DIR     = os.path.join(_BACKEND_DIR, "data")
 
-if _SERVICES_DIR not in sys.path:
-    sys.path.insert(0, _SERVICES_DIR)
-
-from generate_dataset import engineer_features, generate_raw_dataset
+from app.services.generate_dataset import engineer_features
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +53,22 @@ class RiskOutput:
 
 
 _MODEL_CACHE: dict = {}
+
+def init_models() -> None:
+    try:
+        _load_model("xgboost")
+    except FileNotFoundError:
+        pass
+    try:
+        _load_model("random_forest")
+    except FileNotFoundError:
+        pass
+    
+    scaler_path = os.path.join(_DATA_DIR, "scaler.pkl")
+    if os.path.exists(scaler_path):
+        _MODEL_CACHE["scaler"] = joblib.load(scaler_path)
+    else:
+        logger.warning(f"Scaler not found at {scaler_path}")
 
 def _load_model(name: str = "xgboost"):
     if name in _MODEL_CACHE:
@@ -156,12 +169,17 @@ def get_risk_score(
     raw_df = pd.DataFrame([features])
     eng_df = engineer_features(raw_df)
 
-    ref_raw    = generate_raw_dataset(n_samples=500)
-    ref_eng    = engineer_features(ref_raw)
-    feat_cols  = [c for c in ref_eng.columns if c != "injury_risk"]
+    feat_cols  = [c for c in eng_df.columns if c != "injury_risk"]
 
-    scaler = MinMaxScaler()
-    scaler.fit(ref_eng[feat_cols])
+    scaler = _MODEL_CACHE.get("scaler")
+    if not scaler:
+        logger.warning("Scaler not found in cache. Falling back to dynamic refit.")
+        from sklearn.preprocessing import MinMaxScaler
+        from app.services.generate_dataset import generate_raw_dataset
+        ref_raw    = generate_raw_dataset(n_samples=500)
+        ref_eng    = engineer_features(ref_raw)
+        scaler = MinMaxScaler()
+        scaler.fit(ref_eng[feat_cols])
 
     X = scaler.transform(eng_df[feat_cols])
 

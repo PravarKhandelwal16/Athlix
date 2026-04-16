@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from app.models.schemas import PoseLandmarkItem
+from app.models.schemas import Landmark
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def normalize_landmark(x: float, y: float, z: float) -> Point3D:
 
 
 def _get_point(
-    landmarks: List[PoseLandmarkItem],
+    landmarks: List[Landmark],
     name: str,
 ) -> Optional[Point3D]:
     idx = _IDX.get(name)
@@ -86,7 +86,7 @@ def _get_point(
 
 
 def _safe_angle(
-    landmarks: List[PoseLandmarkItem],
+    landmarks: List[Landmark],
     a_name: str,
     b_name: str,
     c_name: str,
@@ -106,21 +106,21 @@ def _average(*values: Optional[float]) -> Optional[float]:
     return round(sum(valid) / len(valid), 4)
 
 
-def compute_knee_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+def compute_knee_angle(landmarks: List[Landmark]) -> Optional[float]:
     """Knee flexion angle (hip→knee→ankle), averaged left and right."""
     left  = _safe_angle(landmarks, "LEFT_HIP",  "LEFT_KNEE",  "LEFT_ANKLE")
     right = _safe_angle(landmarks, "RIGHT_HIP", "RIGHT_KNEE", "RIGHT_ANKLE")
     return _average(left, right)
 
 
-def compute_hip_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+def compute_hip_angle(landmarks: List[Landmark]) -> Optional[float]:
     """Hip flexion angle (shoulder→hip→knee), averaged left and right."""
     left  = _safe_angle(landmarks, "LEFT_SHOULDER",  "LEFT_HIP",  "LEFT_KNEE")
     right = _safe_angle(landmarks, "RIGHT_SHOULDER", "RIGHT_HIP", "RIGHT_KNEE")
     return _average(left, right)
 
 
-def compute_back_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
+def compute_back_angle(landmarks: List[Landmark]) -> Optional[float]:
     """Trunk inclination angle relative to vertical (0° = upright)."""
     ls = _get_point(landmarks, "LEFT_SHOULDER")
     rs = _get_point(landmarks, "RIGHT_SHOULDER")
@@ -147,7 +147,7 @@ def compute_back_angle(landmarks: List[PoseLandmarkItem]) -> Optional[float]:
 
 
 def compute_all_angles(
-    landmarks: List[PoseLandmarkItem],
+    landmarks: List[Landmark],
 ) -> Dict[str, Optional[float]]:
     """Return knee_angle, hip_angle, and back_angle for a single frame."""
     return {

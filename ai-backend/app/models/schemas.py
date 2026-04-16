@@ -19,20 +19,12 @@ class RiskLevel(str, Enum):
 
 
 class Landmark(BaseModel):
-    name: str
-    x: float = Field(..., ge=0.0, le=1.0)
-    y: float = Field(..., ge=0.0, le=1.0)
-    z: float
-    visibility: float = Field(0.0, ge=0.0, le=1.0)
-
-
-class PoseLandmarkItem(BaseModel):
-    id: int   = Field(..., ge=0, le=32)
+    id: Optional[int] = Field(None, ge=0, le=32)
     name: str
     x: float
     y: float
     z: float
-    visibility: float = Field(..., ge=0.0, le=1.0)
+    visibility: float = Field(0.0, ge=0.0, le=1.0)
 
 
 class AngleResult(BaseModel):
@@ -57,7 +49,7 @@ class PoseDetectionResponse(BaseModel):
     pose_detected:      bool
     landmark_count:     int
     processing_time_ms: float
-    landmarks:  List[PoseLandmarkItem] = Field(default_factory=list)
+    landmarks:  List[Landmark] = Field(default_factory=list)
     angles:     Optional[AngleResult]  = None
     form_flags: Optional[FormFlags]    = None
 

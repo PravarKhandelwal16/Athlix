@@ -12,7 +12,6 @@ from app.models.schemas import (
     FormThresholds,
     JointAngles,
     Landmark,
-    PoseLandmarkItem,
     PoseDetectionResponse,
     SetSnapshot,
 )
@@ -42,7 +41,7 @@ _LM_INDEX: Dict[str, int] = {
 _MIN_VISIBILITY: float = 0.4
 
 
-def _get_lm_item(landmarks: List[PoseLandmarkItem], name: str) -> Optional[PoseLandmarkItem]:
+def _get_lm_item(landmarks: List[Landmark], name: str) -> Optional[Landmark]:
     idx = _LM_INDEX.get(name)
     if idx is None or idx >= len(landmarks):
         return None
@@ -72,7 +71,7 @@ def _symmetry_score(left: Optional[float], right: Optional[float]) -> Optional[f
     return round(1.0 - min(abs(left - right) / 180.0, 1.0), 4)
 
 
-def _check_knee_valgus(landmarks: List[PoseLandmarkItem], tolerance: float) -> Optional[bool]:
+def _check_knee_valgus(landmarks: List[Landmark], tolerance: float) -> Optional[bool]:
     left_knee   = _get_lm_item(landmarks, "LEFT_KNEE")
     left_ankle  = _get_lm_item(landmarks, "LEFT_ANKLE")
     right_knee  = _get_lm_item(landmarks, "RIGHT_KNEE")
@@ -97,7 +96,7 @@ def _check_bad_back_posture(back_angle: Optional[float], threshold: float) -> Op
     return back_angle > threshold
 
 
-def _check_insufficient_depth(landmarks: List[PoseLandmarkItem], margin: float) -> Optional[bool]:
+def _check_insufficient_depth(landmarks: List[Landmark], margin: float) -> Optional[bool]:
     left_hip   = _get_lm_item(landmarks, "LEFT_HIP")
     left_knee  = _get_lm_item(landmarks, "LEFT_KNEE")
     right_hip  = _get_lm_item(landmarks, "RIGHT_HIP")
@@ -115,7 +114,7 @@ def _check_insufficient_depth(landmarks: List[PoseLandmarkItem], margin: float) 
 
 
 def analyze_form(
-    landmarks: List[PoseLandmarkItem],
+    landmarks: List[Landmark],
     back_angle: Optional[float],
     thresholds: Optional[FormThresholds] = None,
 ) -> FormFlags:

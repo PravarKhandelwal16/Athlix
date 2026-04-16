@@ -8,7 +8,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-from app.models.schemas import AngleResult, FormFlags, Landmark, PoseLandmarkItem, PoseDetectionResponse
+from app.models.schemas import AngleResult, FormFlags, Landmark, PoseDetectionResponse
 from app.services.feature_engineering import analyze_form
 from app.utils.angle_utils import calculate_angle, compute_all_angles
 
@@ -159,8 +159,8 @@ def _parse_landmarks_to_schema(pose_landmarks) -> List[Landmark]:
     return landmarks
 
 
-def _parse_landmarks_to_items(pose_landmarks) -> List[PoseLandmarkItem]:
-    items: List[PoseLandmarkItem] = []
+def _parse_landmarks_to_items(pose_landmarks) -> List[Landmark]:
+    items: List[Landmark] = []
     for idx, lm in enumerate(pose_landmarks.landmark):
         try:
             name = _POSE_LANDMARKS(idx).name
@@ -178,13 +178,13 @@ def _parse_landmarks_to_items(pose_landmarks) -> List[PoseLandmarkItem]:
         )
     return items
 
-def _mock_landmark_items(pose_landmarks) -> List[PoseLandmarkItem]:
+def _mock_landmark_items(pose_landmarks) -> List[Landmark]:
     items = []
     import random
     from app.services.feature_engineering import _LM_INDEX
     for name, idx in _LM_INDEX.items():
         items.append(
-            PoseLandmarkItem(
+            Landmark(
                 id=idx,
                 name=name,
                 x=round(random.uniform(0.4, 0.6), 6),
