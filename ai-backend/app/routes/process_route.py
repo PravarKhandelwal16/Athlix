@@ -28,11 +28,11 @@ router = APIRouter(prefix="", tags=["Frame Processing"])
 _ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 _ISSUE_DETAILS = {
-    "Incomplete Depth":       "Hip crease did not drop below the patella.",
-    "Knee Valgus":            "Medial collapse detected during the concentric phase.",
-    "Excessive Forward Lean": "Torso angle exceeded safe thresholds relative to vertical.",
-    "Heel Rise":              "Heel lifted off the platform during the descent.",
-    "Lateral Shift":          "Lateral weight distribution asymmetry detected.",
+    "Not going low enough":       "Your hips didn't go below your knees.",
+    "Knees going inward":            "Your knees move inward while coming up.",
+    "Leaning too far forward": "Your upper body tilted too far forward.",
+    "Heels lifting up":              "Your heels came off the floor while going down.",
+    "Shifting to one side":          "Your weight shifted more to one side.",
 }
 
 

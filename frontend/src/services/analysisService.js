@@ -89,27 +89,27 @@ function generateCoachingTips(coachingMap, issues, relativeIntensity, recoveryMu
   if (relativeIntensity > 0.85) {
     tips.unshift({
       id: 99,
-      action: 'Manage Absolute Intensity',
-      cue: `Current relative load (${(relativeIntensity * 100).toFixed(0)}%) is stressing raw kinematics. Consider dropping load by 10–15%.`,
-      target: 'Load Auto-Regulation',
+      action: 'Lower the weight',
+      cue: `The weight is too heavy and hurting your form. Try dropping the weight by 10-15%.`,
+      target: 'Weight Control',
     });
   }
 
   if (recoveryMult > 1.2) {
     tips.unshift({
       id: 98,
-      action: 'Prioritize Recovery',
-      cue: 'Systemic fatigue is altering movement patterns. Focus on sleep optimization and extended warm-ups.',
-      target: 'Recovery Periodization',
+      action: 'Focus on Rest',
+      cue: 'You are exhausted and it is affecting your form. Get more sleep and warm up fully.',
+      target: 'Rest & Recovery',
     });
   }
 
   if (tips.length < 2) {
     tips.push({
       id: 50,
-      action: 'Control Deceleration',
-      cue: 'Implement a 3-second eccentric phase to build tendon resilience.',
-      target: 'Tendon Load',
+      action: 'Control the speed',
+      cue: 'Take 3 seconds to lower the weight to build up your strength safely.',
+      target: 'Joint Safety',
     });
   }
 
@@ -119,12 +119,12 @@ function generateCoachingTips(coachingMap, issues, relativeIntensity, recoveryMu
 // ─── Summary generator ────────────────────────────────────────────
 function generateSummary(exerciseDisplayName, issues, relativeIntensity, overallScore) {
   const issueNames = issues.map(i => i.issue.toLowerCase()).join(', ');
-  const loadDesc = relativeIntensity > 0.85 ? 'high' : relativeIntensity > 0.65 ? 'moderate' : 'low';
-  const qualityDesc = overallScore >= 85 ? 'strong' : overallScore >= 70 ? 'acceptable but declining' : 'compromised';
+  const loadDesc = relativeIntensity > 0.85 ? 'heavy' : relativeIntensity > 0.65 ? 'moderate' : 'light';
+  const qualityDesc = overallScore >= 85 ? 'good' : overallScore >= 70 ? 'okay but declining' : 'breaking down';
 
-  return `${exerciseDisplayName} quality is ${qualityDesc} under ${loadDesc} relative loading. Key areas: ${issueNames}. ${overallScore < 75
-      ? 'Immediate load reduction recommended.'
-      : 'Continue monitoring with progressive overload caution.'
+  return `${exerciseDisplayName} form is ${qualityDesc} under a ${loadDesc} load. Key areas to watch: ${issueNames}. ${overallScore < 75
+      ? 'You should lower the weight immediately.'
+      : 'Keep going but be careful adding more weight.'
     }`;
 }
 
@@ -341,17 +341,17 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
 
   // ── Insight ────────────────────────────────────────────────────
   if (!backendData) {
-    explanationInsight = 'Solid movement pattern under acceptable relative load.';
+    explanationInsight = 'Good form with a safe amount of weight.';
     if (movementRiskIndex >= 75) {
       if (recoveryMultiplier > 1.2) {
-        explanationInsight = 'Elevated risk due to poor recovery state amplifying form fatigue.';
+        explanationInsight = 'High risk of injury because you are not fully rested.';
       } else if (intensityMultiplier > 0.64) {
-        explanationInsight = 'Form breakdown under high relative load. Structures are significantly stressed.';
+        explanationInsight = 'Your form is breaking down because the weight is too heavy.';
       } else {
-        explanationInsight = 'Movement deviation under moderate load — indicates a technique deficit or injury sensitivity.';
+        explanationInsight = 'Your form is off even with a moderate weight. Focus on your technique.';
       }
     } else if (movementRiskIndex >= 40) {
-      explanationInsight = 'Moderate mechanical shifts detected. Monitor load scaling carefully.';
+      explanationInsight = 'Some slight form changes detected. Be careful adding weight.';
     }
   }
 
@@ -395,7 +395,7 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
     movementRiskIndex: backendData ? Math.round(100 - finalScore) : movementRiskIndex,
     riskLabel: backendData ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1).toLowerCase() : riskLabel,
     riskColor: backendData ? riskColor : 'yellow',
-    explanationInsight: explanationInsight ?? (backendData?.injury_reasons?.[0] || 'Solid movement pattern.'),
+    explanationInsight: explanationInsight ?? (backendData?.injury_reasons?.[0] || 'Good form with this weight.'),
     movementVelocity,
     velocityClassification,
     loadScore,

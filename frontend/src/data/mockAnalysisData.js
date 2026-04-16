@@ -11,9 +11,9 @@ export const mockAnalysisData = {
   timestamp: new Date().toISOString(),
   injuryRisk: "ELEVATED",
   keyIssues: [
-    { id: 1, issue: "Incomplete Depth", severity: "High", detail: "Hip crease did not drop below the patella.", flag: "incomplete_depth", joints: ["hip"] },
-    { id: 2, issue: "Knee Valgus", severity: "Medium", detail: "Slight medial collapse detected during the concentric phase.", flag: "knee_valgus", joints: ["knee"] },
-    { id: 3, issue: "Heel Rise", severity: "Low", detail: "Left heel lifted 1.2cm at max extension.", flag: "heel_rise", joints: ["ankle"] }
+    { id: 1, issue: "Not going low enough", severity: "High", detail: "Your hips didn't go below your knees.", fix: "Try to sit down deeper until your hips are below your knees.", flag: "incomplete_depth", joints: ["hip"] },
+    { id: 2, issue: "Knees going inward", severity: "Medium", detail: "Your knees move inward while coming up.", fix: "Try pushing your knees slightly outward as you stand up.", flag: "knee_valgus", joints: ["knee"] },
+    { id: 3, issue: "Heels lifting up", severity: "Low", detail: "Your heels came off the floor while going down.", fix: "Keep your feet flat and push through your heels.", flag: "heel_rise", joints: ["ankle"] }
   ],
   decayData: [
     { rep: 1, score: 92 },
@@ -24,16 +24,16 @@ export const mockAnalysisData = {
     { rep: 6, score: 65 },
   ],
   riskFactors: [
-    { id: 1, title: "Forward Lean Increased", description: "Torso angle exceeded 45 degrees relative to vertical, transferring shear forces from the glutes to the lumbar spine." },
-    { id: 2, title: "Inconsistent Depth", description: "Failure to break parallel during deceleration places excessive eccentric load directly on the patellar tendon." },
-    { id: 3, title: "Fatigue Impact", description: "Posterior chain exhaustion at Rep 5 caused immediate mechanical breakdown, leading to medial knee collapse." }
+    { id: 1, title: "Leaning too much", description: "Your chest dropped too far forward, which can put extra strain on your lower back." },
+    { id: 2, title: "Not going low enough", description: "Stopping your squat too high transfers stress directly to your knees instead of using your leg muscles." },
+    { id: 3, title: "Getting tired", description: "You got tired around Rep 5, which caused your form to break down and your knees to collapse inward." }
   ],
   coachingTips: [
-    { id: 1, action: "Maintain Vertical Torso", cue: "Keep chest proud and focus eyes squarely forward during the descent.", target: "Spinal Neutrality" },
-    { id: 2, action: "Control Deceleration", cue: "Implement a 3-second eccentric phase. Explicitly eliminate bounce out of the hole.", target: "Tendon Load" },
-    { id: 3, action: "Active Glute Engagement", cue: "Actively drive knees outward against an imaginary band during the concentric phase.", target: "Knee Tracking" }
+    { id: 1, action: "Keep Chest Up", cue: "Look straight ahead and show off the logo on your shirt.", target: "Back safety" },
+    { id: 2, action: "Control the speed", cue: "Take about 3 seconds to go down. Don't bounce at the bottom.", target: "Joint safety" },
+    { id: 3, action: "Push Knees Out", cue: "Think about spreading the floor with your feet as you stand up.", target: "Knee safety" }
   ],
-  summary: "The athlete demonstrates strong eccentric control and rigid torso mechanics, but fails to break parallel. The presence of moderate knee valgus combined with incomplete depth indicates potential weakness in the gluteus medius and poor ankle mobility.",
+  summary: "You did a good job keeping your back straight and coming down slowly, but you didn't go quite low enough. Your knees also caved inward slightly, which could mean you need to strengthen your outer hips and improve your ankle flexibility.",
   movementVelocity: "0.68",
   velocityClassification: "Hypertrophy",
   loadScore: "10.7",
@@ -41,7 +41,7 @@ export const mockAnalysisData = {
   movementRiskIndex: 38,
   riskLabel: "Low",
   riskBreakdown: [],
-  explanationInsight: "Solid movement pattern under acceptable relative load.",
+  explanationInsight: "Good form with a safe amount of weight.",
   weightUsed: 100,
   maxPR: 140,
 };

@@ -190,7 +190,7 @@ function Results() {
                 <div className="text-xl font-bold text-[#ff9f0a]">{mockData.decayData.length} Total</div>
               </div>
               <div className="bg-black/40 rounded-2xl p-4">
-                <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-1">Velocity Profile</div>
+                <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-1">Speed Level</div>
                 <div className="text-xl font-bold text-[#32ade6]">{mockData.velocityClassification || 'Moderate'}</div>
               </div>
             </div>
@@ -203,28 +203,27 @@ function Results() {
             <div className="absolute top-0 right-0 p-8 opacity-20 pointer-events-none text-9xl font-black text-white">
               {mockData.movementRiskIndex}
             </div>
-            
-            <h3 className="text-2xl font-bold tracking-tight mb-2 relative z-10">Movement Risk Index</h3>
+
+            <h3 className="text-2xl font-bold tracking-tight mb-2 relative z-10">Safety Score</h3>
             <p className="text-zinc-400 text-sm font-medium leading-relaxed mb-8 max-w-sm relative z-10">
-              Context-aware synthesis of mechanical deviations, session intensity, recovery state, and injury history.
+              A clear look at how safe your movements are based on your form, effort, and recovery.
             </p>
 
             <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
               <div className="flex flex-col items-center justify-center bg-black/60 rounded-[32px] w-48 h-48 border border-white/5 shadow-inner">
-                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 mb-2 rounded-full ${
-                  mockData.riskLabel === 'High' ? 'text-[#ff3b30] bg-[#ff3b30]/10' :
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1 mb-2 rounded-full ${mockData.riskLabel === 'High' ? 'text-[#ff3b30] bg-[#ff3b30]/10' :
                   mockData.riskLabel === 'Moderate' ? 'text-[#ff9f0a] bg-[#ff9f0a]/10' :
-                  'text-[#34c759] bg-[#34c759]/10'
-                }`}>
+                    'text-[#34c759] bg-[#34c759]/10'
+                  }`}>
                   {mockData.riskLabel} RISK
                 </span>
                 <span className="text-7xl font-black text-white tracking-tighter">{mockData.movementRiskIndex}</span>
                 <span className="text-xs text-zinc-500 uppercase font-bold tracking-widest mt-1">/ 100</span>
               </div>
-              
+
               <div className="flex-1 bg-black/40 rounded-[24px] p-6 border border-white/5 w-full">
                 <p className="text-sm text-zinc-300 font-medium leading-relaxed">
-                  <span className="text-white font-bold block mb-2 break-words">Insight:</span>
+                  <span className="text-white font-bold block mb-2 break-words">Tip:</span>
                   {mockData.explanationInsight}
                 </p>
               </div>
@@ -232,11 +231,11 @@ function Results() {
 
             {/* Explainability Breakdown */}
             <div className="mt-8 pt-6 border-t border-white/5 relative z-10">
-              <h4 className="text-xs uppercase font-bold text-zinc-500 tracking-widest mb-4">Risk Factors</h4>
+              <h4 className="text-xs uppercase font-bold text-zinc-500 tracking-widest mb-4">Key Factors</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {mockData.keyIssues?.slice(0, 4).map((issue, idx) => (
                   <div key={idx} className="bg-black/30 rounded-xl p-4 flex flex-col justify-center min-h-[100px]">
-                    <div className="text-[10px] text-zinc-400 font-bold uppercase mb-2">Driver {idx + 1}</div>
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase mb-2">Factor {idx + 1}</div>
                     <div className="text-sm font-bold text-white leading-snug">{issue.issue}</div>
                   </div>
                 ))}
@@ -246,84 +245,25 @@ function Results() {
           </div>
         </FadeSection>
 
-        {/* ─── Form Quality Over Time (Apple Health Chart) ─────── */}
-        <FadeSection delay={100}>
-          <div className="bg-[#1c1c1e] rounded-[32px] p-8 relative overflow-hidden">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-xl font-bold tracking-tight">Form Decay</h3>
-                <p className="text-zinc-400 text-sm font-medium mt-1">Rep-by-rep kinematic score</p>
-              </div>
-              <div className="h-10 w-10 bg-[#32ade6]/20 rounded-full flex items-center justify-center">
-                <svg className="w-5 h-5 text-[#32ade6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                </svg>
-              </div>
-            </div>
-
-            <div className="h-[220px] flex items-end justify-between gap-2 relative mt-4">
-              {/* Threshold Line */}
-              <div
-                className="absolute left-0 right-0 border-t-2 border-dashed border-[#ff3b30]/40 z-0"
-                style={{ bottom: `${(80 / maxScore) * 100}%` }}
-              >
-                <span className="absolute -top-6 right-0 text-xs font-bold text-[#ff3b30] bg-[#1c1c1e] pl-2">
-                  Failure Threshold (80)
-                </span>
-              </div>
-
-              {mockData.decayData.map((data, idx) => {
-                const pct = (data.score / maxScore) * 100;
-                const failing = data.score < 80;
-                const isBreakdown = data.rep === dropRep;
-
-                return (
-                  <div key={idx} className="relative flex flex-col items-center w-full h-full justify-end z-10 group">
-                    {isBreakdown && (
-                      <div className="absolute -top-8 text-[#ff3b30] text-[10px] uppercase font-bold tracking-wider bg-[#ff3b30]/10 px-2 py-1 rounded-md animate-pulse whitespace-nowrap">
-                        Breakdown
-                      </div>
-                    )}
-                    {/* The rounded bar */}
-                    <div
-                      className={`w-full max-w-[40px] rounded-full transition-all duration-[1200ms] ease-out ${failing ? 'bg-[#ff3b30]' : 'bg-[#32ade6]'
-                        } group-hover:opacity-80 cursor-default`}
-                      style={{ height: `${pct}%` }}
-                    />
-                    <div className="mt-3 text-sm font-semibold text-zinc-400">
-                      {data.rep}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-6 p-4 rounded-2xl bg-black/30">
-              <p className="text-sm text-zinc-300 font-medium leading-relaxed">
-                <span className="text-white font-bold">Insight: </span>
-                Kinematic integrity dropped sharply at Rep {dropRep}. To induce optimal adaptation without injury risk, recommend capping this load at {dropRep - 1} reps.
-              </p>
-            </div>
-          </div>
-        </FadeSection>
 
         {/* ─── Personalized Intensity Load (Derived) ───────────── */}
         <FadeSection delay={150}>
           <div className="bg-[#1c1c1e] rounded-[32px] p-8 flex flex-col gap-6 relative overflow-hidden border border-white/5">
             <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-[#32ade6] to-[#af52ff]" />
-            
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
-                <h3 className="text-xl font-bold tracking-tight mb-1">Intensity Profile</h3>
-                <p className="text-zinc-400 text-sm font-medium">Kinematic load multiplied by estimated velocity.</p>
+                <h3 className="text-xl font-bold tracking-tight mb-1">Workout Effort</h3>
+                <p className="text-zinc-400 text-sm font-medium">How hard your body worked during the movement.</p>
               </div>
               <div className="px-4 py-2 bg-black/40 rounded-full border border-white/5 text-xs font-bold text-zinc-300">
-                <span className="opacity-50 mr-2">Est. Velocity</span> {mockData.movementVelocity} m/s
+                <span className="opacity-50 mr-2">Est. Speed</span> {mockData.movementVelocity} m/s
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-black/40 rounded-2xl p-5 border border-white/5">
-                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Relative Load</div>
+                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Weight Focus</div>
                 <div className="text-3xl font-black text-white flex items-baseline gap-1">
                   {mockData.relativePct} <span className="text-sm text-zinc-500 uppercase">%</span>
                 </div>
@@ -331,26 +271,25 @@ function Results() {
               </div>
 
               <div className="bg-black/40 rounded-2xl p-5 border border-white/5">
-                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Movement Class</div>
-                <div className={`text-2xl font-bold ${
-                  mockData.velocityClassification === 'Strength' ? 'text-[#ff3b30]' :
+                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Effort Type</div>
+                <div className={`text-2xl font-bold ${mockData.velocityClassification === 'Strength' ? 'text-[#ff3b30]' :
                   mockData.velocityClassification === 'Power' ? 'text-[#ffea00]' : 'text-[#32ade6]'
-                }`}>
+                  }`}>
                   {mockData.velocityClassification}
                 </div>
-                <div className="text-xs text-zinc-400 mt-1 font-medium">Adaptation Focus</div>
+                <div className="text-xs text-zinc-400 mt-1 font-medium">Goal</div>
               </div>
 
               <div className="bg-black/40 rounded-2xl p-5 border border-white/5 relative overflow-hidden">
                 <div className="absolute -bottom-4 right-0 opacity-10">
-                  <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 </div>
-                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Load Score</div>
+                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Effort Score</div>
                 <div className="text-4xl font-black text-white">{mockData.loadScore}</div>
-                <div className="text-xs text-zinc-400 mt-1 font-medium">Cumulative Stress</div>
+                <div className="text-xs text-zinc-400 mt-1 font-medium">Overall Effort</div>
               </div>
             </div>
-            
+
           </div>
         </FadeSection>
 
@@ -385,6 +324,12 @@ function Results() {
                       <p className="text-zinc-400 text-sm font-medium leading-relaxed">
                         {issue.detail}
                       </p>
+                      {issue.fix && (
+                        <div className="mt-2 text-sm bg-white/5 p-2 rounded-lg border border-white/10">
+                          <span className="text-[#32ade6] font-bold block mb-0.5 text-xs uppercase tracking-wider">Fix</span>
+                          <span className="text-zinc-300">{issue.fix}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -397,7 +342,7 @@ function Results() {
         <FadeSection delay={300}>
           <div className="grid sm:grid-cols-2 gap-6">
             <div className="bg-[#1c1c1e] rounded-[32px] p-6 flex flex-col h-full">
-              <h3 className="text-lg font-bold tracking-tight mb-1">Best Execution</h3>
+              <h3 className="text-lg font-bold tracking-tight mb-1">Best Rep</h3>
               <p className="text-sm font-medium text-zinc-400 tracking-tight mb-4">Rep 01</p>
 
               <div className="w-full aspect-square bg-black rounded-2xl relative overflow-hidden flex items-center justify-center border border-white/5 shadow-inner">
@@ -418,7 +363,7 @@ function Results() {
             </div>
 
             <div className="bg-[#1c1c1e] rounded-[32px] p-6 flex flex-col h-full">
-              <h3 className="text-lg font-bold tracking-tight mb-1">Structural Failure</h3>
+              <h3 className="text-lg font-bold tracking-tight mb-1">Form Breakdown</h3>
               <p className="text-sm font-medium text-zinc-400 tracking-tight mb-4">Rep {dropRep}</p>
 
               <div className="w-full aspect-square bg-black rounded-2xl relative overflow-hidden flex items-center justify-center border border-[#ff3b30]/20 shadow-inner">
@@ -447,22 +392,22 @@ function Results() {
         <FadeSection delay={350}>
           <MovementBreakdownTimeline
             exerciseType={mockData.exerciseType || 'squat'}
-<<<<<<< HEAD
+
             formFlags={{
               knee_valgus: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('knee') || i.issue.toLowerCase().includes('valgus')),
               incomplete_depth: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('depth')),
               excessive_forward_lean: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('posture') || i.issue.toLowerCase().includes('lean') || i.issue.toLowerCase().includes('decay')),
             }}
-=======
+
             keyIssues={mockData.keyIssues || []}
->>>>>>> 1898f6e (new movement breakdown)
+
           />
         </FadeSection>
 
         {/* ─── Coaching Recommendations (App Store Style Cards) ──── */}
         <FadeSection delay={400}>
           <div>
-            <h3 className="text-2xl font-bold tracking-tight mb-6 px-2">Coaching Plan</h3>
+            <h3 className="text-2xl font-bold tracking-tight mb-6 px-2">Personal Coaching</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               {mockData.coachingTips.map((tip, idx) => {
                 // Different bright gradients for the cards
@@ -477,7 +422,7 @@ function Results() {
                   <div key={tip.id} className="relative rounded-[32px] overflow-hidden bg-[#1c1c1e] p-6 h-full flex flex-col hover:scale-[1.02] transition-transform duration-300 shadow-xl cursor-pointer">
                     <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${g}`} />
 
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Priority {idx + 1}</div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Main Focus</div>
                     <h4 className="text-xl font-bold text-white mb-2 leading-tight">{tip.action}</h4>
                     <p className="text-sm text-zinc-400 font-medium mb-6 flex-1 leading-relaxed">{tip.cue}</p>
 
