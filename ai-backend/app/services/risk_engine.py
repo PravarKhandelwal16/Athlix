@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 import os
 import sys
@@ -12,10 +10,9 @@ _SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
 _BACKEND_DIR  = os.path.abspath(os.path.join(_SERVICES_DIR, "..", ".."))
 _DATA_DIR     = os.path.join(_BACKEND_DIR, "data")
 
-if _SERVICES_DIR not in sys.path:
-    sys.path.insert(0, _SERVICES_DIR)
-
-from generate_dataset import engineer_features, generate_raw_dataset
+# Removed sys.path hack
+# Use absolute import from 'app.services'
+from app.services.generate_dataset import engineer_features, generate_raw_dataset
 
 logger = logging.getLogger(__name__)
 

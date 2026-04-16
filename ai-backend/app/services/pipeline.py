@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 
-_SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SERVICES_DIR not in sys.path:
-    sys.path.insert(0, _SERVICES_DIR)
-
-from coach     import CoachingReport, Suggestion, get_recommendations
-from explainer import Explanation, explain_prediction
-from risk_engine import RiskOutput, _validate_input, get_risk_score
-
+# Removed sys.path hack
+# Use absolute imports
+from app.services.coach import CoachingReport, Suggestion, get_recommendations
+from app.services.explainer import Explanation, explain_prediction
+from app.services.risk_engine import RiskOutput, _validate_input, get_risk_score
 
 @dataclass
 class PipelineResult:

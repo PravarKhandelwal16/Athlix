@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass, field
 from enum import Enum
 
-_SERVICES_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SERVICES_DIR not in sys.path:
-    sys.path.insert(0, _SERVICES_DIR)
-
-from risk_engine import (
+# Removed sys.path hack
+# Use absolute import
+from app.services.risk_engine import (
     FATIGUE_HIGH_THRESHOLD,
     FORM_DECAY_HIGH_THRESHOLD,
     RECOVERY_LOW_THRESHOLD,
