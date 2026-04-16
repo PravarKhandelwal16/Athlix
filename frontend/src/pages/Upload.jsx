@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { analyzeVideo } from "../services/analysisService";
-import { processFrameAnalysis } from "../services/analysisService";
 
 
 function Upload() {
@@ -66,7 +65,7 @@ function Upload() {
     setError(null);
 
     try {
-      const data = await processFrameAnalysis(selectedFile, trainingLoad, sleepHours);
+      const data = await analyzeVideo(selectedFile);
       if (data.error) {
         setError(data.error);
       } else {

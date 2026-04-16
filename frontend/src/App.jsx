@@ -5,10 +5,12 @@ import Upload from "./pages/Upload";
 import Login from "./pages/Login";
 import Analysis from "./pages/Analysis";
 import Results from "./pages/Results";
+import Navbar from "./components/Navbar";
 
 function App() {
   return (
     <BrowserRouter>
+      <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />

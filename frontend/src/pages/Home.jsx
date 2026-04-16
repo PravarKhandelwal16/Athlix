@@ -5,21 +5,6 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-white text-zinc-950 selection:bg-zinc-300 font-sans">
-      {/* Navigation / Header - Floating over the dark hero */}
-      <nav className="absolute top-0 w-full px-6 py-8 md:px-12 flex justify-between items-center z-50">
-        <div className="text-xl font-bold tracking-tight flex items-center gap-2 text-white">
-          <div className="w-6 h-6 bg-white text-black flex items-center justify-center rounded-sm">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-          </div>
-          Athlix
-        </div>
-        <button 
-          onClick={() => navigate('/login')}
-          className="text-sm border-b border-transparent hover:border-white font-semibold text-white tracking-widest uppercase transition-all"
-        >
-          Login
-        </button>
-      </nav>
 
       <main>
         {/* 1. Hero Section */}
