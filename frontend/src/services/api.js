@@ -1,21 +1,19 @@
 import { mockAnalysisData } from '../data/mockAnalysisData';
 
 export const api = {
-  /**
-   * Simulates fetching analysis results from the backend.
-   * Replaces real API call for the frontend MVP phase.
-   */
-  async getAnalysisResults() {
-    // Simulate a brief network delay
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const cached = localStorage.getItem('temp_analysis');
-        if (cached) {
-          resolve(JSON.parse(cached));
-        } else {
-          resolve(mockAnalysisData);
-        }
-      }, 400);
-    });
+  async getAnalysisResults(videoData) {
+    // VITE_API_BASE_URL will be provided by Vercel later
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'; 
+    
+    try {
+      const response = await fetch(`${baseUrl}/upload`, { 
+        method: 'POST',
+        // Add headers and body depending on how your backend expects the data
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      throw error;
+    }
   }
 };
