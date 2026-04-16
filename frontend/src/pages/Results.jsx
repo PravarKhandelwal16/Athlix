@@ -232,18 +232,12 @@ function Results() {
 
             {/* Explainability Breakdown */}
             <div className="mt-8 pt-6 border-t border-white/5 relative z-10">
-              <h4 className="text-xs uppercase font-bold text-zinc-500 tracking-widest mb-4">Risk Contribution Breakdown</h4>
+              <h4 className="text-xs uppercase font-bold text-zinc-500 tracking-widest mb-4">Risk Factors</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {mockData.riskBreakdown?.slice(0, 4).map((rb, idx) => (
-                  <div key={idx} className="bg-black/30 rounded-xl p-4">
-                    <div className="text-[10px] text-zinc-400 font-bold uppercase truncate mb-1" title={rb.issue}>{rb.issue}</div>
-                    <div className="text-lg font-bold text-white mb-2">+{rb.contribution}</div>
-                    <div className="flex flex-col gap-1 text-[9px] text-zinc-600 font-mono">
-                      <span>Sev: {rb.flawSeverity}</span>
-                      <span>Int: x{rb.intensityMult}</span>
-                      <span>Rec: x{rb.recoveryMult}</span>
-                      <span>His: x{rb.historyMult}</span>
-                    </div>
+                {mockData.keyIssues?.slice(0, 4).map((issue, idx) => (
+                  <div key={idx} className="bg-black/30 rounded-xl p-4 flex flex-col justify-center min-h-[100px]">
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase mb-2">Driver {idx + 1}</div>
+                    <div className="text-sm font-bold text-white leading-snug">{issue.issue}</div>
                   </div>
                 ))}
               </div>
@@ -453,12 +447,11 @@ function Results() {
         <FadeSection delay={350}>
           <FormCorrectionPreview
             exerciseType={mockData.exerciseType || 'squat'}
-            formFlags={
-              mockData.keyIssues?.reduce((flags, issue) => {
-                if (issue.flag) flags[issue.flag] = true;
-                return flags;
-              }, {}) || {}
-            }
+            formFlags={{
+              knee_valgus: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('knee') || i.issue.toLowerCase().includes('valgus')),
+              incomplete_depth: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('depth')),
+              excessive_forward_lean: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('posture') || i.issue.toLowerCase().includes('lean') || i.issue.toLowerCase().includes('decay')),
+            }}
           />
         </FadeSection>
 

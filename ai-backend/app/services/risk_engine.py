@@ -55,20 +55,14 @@ class RiskOutput:
 _MODEL_CACHE: dict = {}
 
 def init_models() -> None:
-    try:
-        _load_model("xgboost")
-    except FileNotFoundError:
-        pass
-    try:
-        _load_model("random_forest")
-    except FileNotFoundError:
-        pass
+    _load_model("xgboost")
+    _load_model("random_forest")
     
     scaler_path = os.path.join(_DATA_DIR, "scaler.pkl")
     if os.path.exists(scaler_path):
         _MODEL_CACHE["scaler"] = joblib.load(scaler_path)
     else:
-        logger.warning(f"Scaler not found at {scaler_path}")
+        raise FileNotFoundError(f"Scaler not found at {scaler_path}")
 
 def _load_model(name: str = "xgboost"):
     if name in _MODEL_CACHE:
@@ -177,13 +171,7 @@ def get_risk_score(
 
     scaler = _MODEL_CACHE.get("scaler")
     if not scaler:
-        logger.warning("Scaler not found in cache. Falling back to dynamic refit.")
-        from sklearn.preprocessing import MinMaxScaler
-        from app.services.generate_dataset import generate_raw_dataset
-        ref_raw    = generate_raw_dataset(n_samples=500)
-        ref_eng    = engineer_features(ref_raw)
-        scaler = MinMaxScaler()
-        scaler.fit(ref_eng[feat_cols])
+        raise RuntimeError("Scaler not loaded. Server must be restarted with scaler.pkl present.")
 
     X = scaler.transform(eng_df[feat_cols])
 

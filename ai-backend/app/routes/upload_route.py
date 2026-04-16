@@ -10,6 +10,7 @@ from typing import List
 import cv2
 import numpy as np
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.models.schemas import (
     BiomechanicalFeatures,
@@ -93,6 +94,55 @@ async def upload_frame(
     )
 
 
+def _process_video_sync(tmp_path_str: str, max_frames: int) -> dict:
+    frame_results: List[FrameResult] = []
+    cap = cv2.VideoCapture(tmp_path_str)
+
+    if not cap.isOpened():
+        return {"error": "OpenCV could not open the uploaded video file."}
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    detected = 0
+
+    try:
+        with PoseService(static_image_mode=False) as pose_svc:
+            frame_idx = 0
+            while cap.isOpened() and frame_idx < max_frames:
+                ret, bgr_frame = cap.read()
+                if not ret:
+                    break
+
+                landmarks = pose_svc.process_frame(_bgr_to_rgb(bgr_frame))
+                pose_detected = landmarks is not None
+                features: BiomechanicalFeatures | None = None
+                error_msg: str | None = None
+
+                if pose_detected:
+                    detected += 1
+                    try:
+                        features = build_feature_vector(frame_index=frame_idx, landmarks=landmarks)
+                    except Exception as exc:
+                        error_msg = f"Feature extraction error: {exc}"
+                else:
+                    error_msg = "No pose detected."
+
+                frame_results.append(FrameResult(
+                    frame_index=frame_idx,
+                    pose_detected=pose_detected,
+                    landmarks=landmarks,
+                    features=features,
+                    error_message=error_msg,
+                ))
+                frame_idx += 1
+    finally:
+        cap.release()
+
+    return {
+        "frame_results": frame_results,
+        "total_frames": total_frames,
+        "detected": detected
+    }
+
 @router.post("/video", response_model=VideoProcessingResponse, summary="Process a video file")
 async def upload_video(
     file: UploadFile = File(...),
@@ -107,56 +157,19 @@ async def upload_video(
         with tmp_path.open("wb") as buf:
             shutil.copyfileobj(file.file, buf)
 
-        frame_results: List[FrameResult] = []
-        cap = cv2.VideoCapture(str(tmp_path))
+        logger.info("Video received: %s — (capped at %d frames)", file.filename, _MAX_VIDEO_FRAMES)
 
-        if not cap.isOpened():
+        result_dict = await run_in_threadpool(_process_video_sync, str(tmp_path), _MAX_VIDEO_FRAMES)
+        
+        if "error" in result_dict:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="OpenCV could not open the uploaded video file.",
+                detail=result_dict["error"],
             )
 
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        logger.info("Video received: %s — %d total frames (capped at %d)", file.filename, total_frames, _MAX_VIDEO_FRAMES)
-
-        try:
-            with PoseService(static_image_mode=False) as pose_svc:
-                frame_idx = 0
-                detected  = 0
-                logger.info("Processing started")
-
-                while cap.isOpened() and frame_idx < _MAX_VIDEO_FRAMES:
-                    ret, bgr_frame = cap.read()
-                    if not ret:
-                        break
-
-                    landmarks = pose_svc.process_frame(_bgr_to_rgb(bgr_frame))
-                    pose_detected = landmarks is not None
-                    features: BiomechanicalFeatures | None = None
-                    error_msg: str | None = None
-
-                    if pose_detected:
-                        detected += 1
-                        try:
-                            features = build_feature_vector(frame_index=frame_idx, landmarks=landmarks)
-                        except Exception as exc:
-                            logger.warning("Feature extraction failed at frame %d: %s", frame_idx, exc)
-                            error_msg = f"Feature extraction error: {exc}"
-                    else:
-                        error_msg = "No pose detected."
-
-                    frame_results.append(FrameResult(
-                        frame_index=frame_idx,
-                        pose_detected=pose_detected,
-                        landmarks=landmarks,
-                        features=features,
-                        error_message=error_msg,
-                    ))
-                    frame_idx += 1
-                    logger.info("Frame %d processed", frame_idx)
-        finally:
-            cap.release()
-            logger.info("Video cap released after %d frames", frame_idx if 'frame_idx' in dir() else 0)
+        frame_results = result_dict["frame_results"]
+        total_frames = result_dict["total_frames"]
+        detected = result_dict["detected"]
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

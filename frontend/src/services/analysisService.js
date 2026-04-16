@@ -210,10 +210,17 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
   const relativeIntensity = config.usesWeight
     ? clamp(w / pr, 0.1, 1.2)
     : clamp(0.5 + (parseFloat(sessionContext?.soreness) || 3) * 0.05, 0.3, 0.9);
-  const reps = parseFloat(sessionContext?.reps) || 5;
   const sets = parseFloat(sessionContext?.sets) || 3;
   const userHeightCm = parseFloat(profile?.height) || 180;
   const heightMeters = userHeightCm / 100;
+
+  // ── Use backend values if available ───────────────────────────
+  const finalScore          = backendData?.score ?? 82;
+  const reps                = backendData?.feature_vector?.reps_detected ?? parseFloat(sessionContext?.reps) ?? 5;
+  const riskLevel           = (backendData?.risk_level ?? 'Moderate').toUpperCase();
+  const riskColor           = backendData?.risk_color ?? 'yellow';
+  const reasonArray         = backendData?.injury_reasons ?? [];
+  const explanationInsight  = reasonArray.length > 0 ? reasonArray[0] : null;
 
   // ── Velocity estimation ────────────────────────────────────────
   const pixelDisplacement = 250 + sessionRandom(seed) * 100;
@@ -233,6 +240,14 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
 
   const loadScore = backendData?.loadScore
     ?? (relativeIntensity * (reps * sets) * velocityFactor).toFixed(1);
+
+  // Map injury reasons into expected issues format if coming from backend
+  const backendIssues = reasonArray.map((reason, idx) => ({
+    id: `be_${idx}`,
+    issue: reason,
+    detail: reason,
+    severity: riskLevel === 'HIGH' ? 'High' : 'Medium'
+  }));
 
   // ── Recovery multiplier ────────────────────────────────────────
   const sleep = parseFloat(sessionContext?.sleepHours) || 8;
@@ -350,7 +365,7 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
     exerciseType,
     movement: config.displayName,
     timestamp: new Date().toISOString(),
-    injuryRisk: injuryRiskLabel,
+    injuryRisk: riskLevel,
     reps,
     decayData,
     keyIssues,
@@ -359,12 +374,24 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
       title: iss.issue,
       description: iss.detail,
     })),
-    coachingTips,
-    summary: generateSummary(config.displayName, scoredIssues, relativeIntensity, overallScore),
-    movementRiskIndex,
-    riskLabel,
-    riskBreakdown,
-    explanationInsight,
+    coachingTips: backendData?.recommendations 
+      ? backendData.recommendations.map((rec, idx) => ({
+          id: idx + 1,
+          action: rec.title,
+          cue: rec.detail,
+          target: rec.category,
+          priority: rec.priority
+        }))
+      : coachingTips,
+    summary: backendData 
+      ? `Movement quality is ${finalScore >= 85 ? 'strong' : finalScore >= 70 ? 'acceptable' : 'compromised'}. ${
+          backendData.recommendations?.[0] ? `Priority: ${backendData.recommendations[0].title}. ` : ''
+        }`
+      : generateSummary(config.displayName, scoredIssues, relativeIntensity, overallScore),
+    movementRiskIndex: backendData ? Math.round(100 - finalScore) : movementRiskIndex,
+    riskLabel: backendData ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1).toLowerCase() : riskLabel,
+    riskColor: backendData ? riskColor : 'yellow',
+    explanationInsight: explanationInsight ?? (backendData?.injury_reasons?.[0] || 'Solid movement pattern.'),
     movementVelocity,
     velocityClassification,
     loadScore,
