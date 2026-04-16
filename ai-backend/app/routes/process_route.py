@@ -126,8 +126,6 @@ async def process_frame(
     )
 
 
-
-
 def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 15) -> dict:
     cap = cv2.VideoCapture(tmp_path_str)
     if not cap.isOpened():
@@ -185,128 +183,49 @@ def _extract_video_features_sync(tmp_path_str: str, max_frames: int = 15) -> dic
         "back_angles": back_angles,
     }
 
+
 @router.post("/analyze")
-async def analyze_video(file: UploadFile = File(...)):
+async def analyze_video(
+    file: UploadFile = File(...),
+    training_experience: str = Form("Intermediate"),
+    relative_intensity: str = Form("Medium"),
+    max_pr: float = Form(0.0),
+    body_weight: float = Form(0.0),
+):
     """
-    Analyzes the video by processing up to 15 frames.
-    All outputs are computed from real pose data — ZERO hardcoded values.
+    Analyzes the video using the intelligent scoring engine.
+    Personalization and Intensity-aware results are computed automatically.
     """
-    logger.info("Video received: %s", file.filename)
+    logger.info("Video received for intelligent analysis: %s", file.filename)
 
     tmp_dir = tempfile.mkdtemp(prefix="analyze_")
     tmp_path = Path(tmp_dir) / (file.filename or "upload.mp4")
 
     try:
-        # Read asynchronously — does not block the event loop
+        # Save video to tmp file
         file_bytes = await file.read()
         tmp_path.write_bytes(file_bytes)
 
-        # ── Step 0: Clear global history to prevent state leakage between runs ─
-        import app.services.pose_service as pose_service
-        pose_service.FRAME_ANGLES_HISTORY = []
+        # ── Step 1: Clear global history and populate it via analyze_video_form ──
+        # This populates FRAME_ANGLES_HISTORY with knee, hip, back, drift, and visibility
+        from app.services.pose_service import analyze_video_form
+        _ = await run_in_threadpool(analyze_video_form, str(tmp_path))
 
-        logger.info("Processing started")
-        
-        result_dict = await run_in_threadpool(_extract_video_features_sync, str(tmp_path))
-        if "error" in result_dict:
-            logger.error("analysis error: %s", result_dict["error"])
-            return {"error": "processing failed", "detail": result_dict["error"]}
-
-        fps = result_dict["fps"]
-        frames_processed = result_dict["frames_processed"]
-        all_landmarks = result_dict["all_landmarks"]
-        knee_angles = result_dict["knee_angles"]
-        hip_angles = result_dict["hip_angles"]
-        back_angles = result_dict["back_angles"]
-
-        if not all_landmarks:
-            logger.warning("No pose detected in video: %s", file.filename)
-            return {"error": "processing failed", "detail": "No pose detected in video"}
-
-        # ── Rep counting: detect flexion→extension cycles in knee angle ──────
-        # A rep = knee crosses below FLEX_THRESH then rises back above EXT_THRESH
-        reps = 0
-        in_flexion = False
-        FLEX_THRESH = 120.0  # degrees — athlete is squatting
-        EXT_THRESH  = 150.0  # degrees — athlete has stood up (rep complete)
-        for ka in knee_angles:
-            if not in_flexion and ka < FLEX_THRESH:
-                in_flexion = True
-            elif in_flexion and ka > EXT_THRESH:
-                reps += 1
-                in_flexion = False
-
-        # ── Aggregate real per-frame measurements ────────────────────────────
-        knee_min  = round(min(knee_angles),  2) if knee_angles  else 90.0
-        hip_min   = round(min(hip_angles),   2) if hip_angles   else 90.0
-        back_max  = round(max(back_angles),  2) if back_angles  else 30.0
-        knee_mean = round(sum(knee_angles) / len(knee_angles), 2) if knee_angles else 90.0
-
-        # form_decay: knee angle variance normalised to 0-1
-        # High variance → unstable mechanics → higher decay
-        # Increase divisor (60->120) to make it less sensitive to per-frame jitter
-        knee_std   = statistics.stdev(knee_angles) if len(knee_angles) > 1 else 0.0
-        form_decay = round(min(knee_std / 120.0, 1.0), 4)
-        
-        # form_score: aggregate "badness" metric for the risk engine
-        avg_penalty = sum(15 if a < 60 else (8 if a < 90 else 0) for a in knee_angles) / len(knee_angles)
-        form_score = round(min(max(knee_std * 1.5 + avg_penalty, 0.0), 100.0), 2)
-
-        # fatigue_index: compare early vs late knee angles
-        # If later frames show more extreme angles, fatigue is higher
-        third      = max(len(knee_angles) // 3, 1)
-        early_mean = sum(knee_angles[:third])  / third
-        late_mean  = sum(knee_angles[-third:]) / third
-        decay_ratio   = abs(late_mean - early_mean) / (early_mean + 1e-6)
-        fatigue_index = round(min(decay_ratio * 10.0, 10.0), 4)
-
-        # recovery_score: inverse of fatigue (0-100 scale)
-        recovery_score = round(max(100.0 - fatigue_index * 8.0, 0.0), 2)
-
-        # training_load heuristic from observed video duration
-        duration_s    = frames_processed / fps
-        training_load = round(min(1.0 + duration_s * 0.5, 10.0), 2)
-
-        # Form flags from the last detected landmark frame
-        best_landmarks  = all_landmarks[-1]
-        best_angles_obj = extract_joint_angles(best_landmarks)
-        form_flags      = analyze_form(best_landmarks, back_angle=best_angles_obj.back)
-
-        feature_vector = {
-            "training_load":   training_load,
-            "recovery_score":  recovery_score,
-            "fatigue_index":   fatigue_index,
-            "form_decay":      form_decay,
-            "previous_injury": 0,
-            "knee_angle_min":  knee_min,
-            "hip_angle_min":   hip_min,
-            "back_angle_max":  back_max,
-            "knee_angle_mean": knee_mean,
-            "reps_detected":   reps,
-        }
-        
-        print("\n----- DEBUG PROCESS/FEATURE -----")
-        print(f"Number of frames processed: {frames_processed}")
-        print(f"Extracted Angles (min/max) -> knee: {knee_min}, hip: {hip_min}, back: {back_max}")
-        print(f"Feature Values: {feature_vector}")
-        print("---------------------------------\n")
-        
-        logger.info("Processing new video — feature_vector: %s", feature_vector)
-
-        # ML model receives only its trained 5 features + form_score
+        # ── Step 2: Run the intelligent pipeline ──
+        # Pipeline will look at FRAME_ANGLES_HISTORY and use the provided metadata
         risk_input = {
-            "training_load":   training_load,
-            "recovery_score":  recovery_score,
-            "fatigue_index":   fatigue_index,
-            "form_decay":      form_decay,
-            "previous_injury": 0,
-            "form_score":      form_score,
+            "training_experience": training_experience,
+            "relative_intensity": relative_intensity,
+            "max_pr": max_pr,
+            "body_weight": body_weight,
+            "previous_injury": 0, # Could be passed from frontend in future
         }
-        logger.info("Features sent to model: %s", risk_input)
-
+        
         pipeline_result = run_pipeline(risk_input)
+        
+        # Result compilation
         computed_score = round(max(0.0, 100.0 - pipeline_result.risk_score), 1)
-
+        
         level_map = {
             "Low": ("SAFE", "green"),
             "Medium": ("MODERATE", "yellow"),
@@ -314,27 +233,23 @@ async def analyze_video(file: UploadFile = File(...)):
         }
         mapped_level, mapped_color = level_map.get(pipeline_result.risk_level, ("MODERATE", "yellow"))
 
-        logger.info(
-            "Model prediction — risk_score=%.2f risk_level=%s",
-            pipeline_result.risk_score, pipeline_result.risk_level,
-        )
-        logger.info(
-            "Returning response — score=%.1f injury_risk=%.2f reps=%d frames=%d",
-            computed_score, pipeline_result.risk_score, reps, frames_processed,
-        )
-
         return {
             "score": computed_score,
             "risk_level": mapped_level,
             "risk_color": mapped_color,
             "injury_reasons": pipeline_result.reasons,
             "recommendations": pipeline_result.recommendations,
-            "feature_vector": feature_vector
+            "feature_vector": {
+                **pipeline_result.input_features,
+                "confidence_score": pipeline_result.confidence_score,
+                "reps_detected": pipeline_result.angle_stats.get("reps_detected", 5) # Rep counting can stay for now
+            },
+            "angle_stats": pipeline_result.angle_stats,
+            "form_flags": pipeline_result.angle_stats.get("form_flags", {})
         }
-
 
     except Exception as exc:
         logger.error("analyze_video processing failed: %s", str(exc), exc_info=True)
-        return {"error": "processing failed"}
+        return {"error": "processing failed", "detail": str(exc)}
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

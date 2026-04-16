@@ -323,17 +323,18 @@ def analyze_video_form(video_path: str) -> float:
                 # Check alignment: if knee moves inward relative to ankle (x-coord drift)
                 # left side typically means knee.x is greater than ankle.x if collapsing inward
                 # We'll penalize the sheer horizontal distance difference for instability
-                align_penalty = 0
                 drift = abs(knee.x - ankle.x)
-                if drift > 0.05:
-                    align_penalty = drift * 50.0  # arbitrary scale for penalty
+                
+                # Visibility for confidence score
+                vis_score = (hip.visibility + knee.visibility + ankle.visibility + shoulder.visibility) / 4.0
 
                 FRAME_ANGLES_HISTORY.append({
                     "frame": frames_read,
                     "knee": angle_knee,
                     "hip": angle_hip,
                     "back": angle_back,
-                    "align_penalty": align_penalty,
+                    "drift": drift,
+                    "visibility": vis_score,
                 })
                 
                 angles.append(angle_knee)

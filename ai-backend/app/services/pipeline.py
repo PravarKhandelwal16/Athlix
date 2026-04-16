@@ -30,6 +30,7 @@ class PipelineResult:
     input_features:  dict
     frame_angles:    list = field(default_factory=list)
     angle_stats:     dict = field(default_factory=dict)
+    confidence_score: str = "Medium"
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +48,7 @@ class PipelineResult:
             "input_features":  self.input_features,
             "frame_angles":    self.frame_angles,
             "angle_stats":     self.angle_stats,
+            "confidence_score": self.confidence_score,
         }
 
     def __str__(self) -> str:
@@ -217,6 +219,82 @@ def run_pipeline(
             print("NO POSE DETECTED")
             raise ValueError("No pose detected in the video")
 
+        # --- Personalization & Intensity Adjustments ---
+        experience = input_features.get("training_experience", "Intermediate").lower()
+        rel_intensity_label = input_features.get("relative_intensity", "Medium").lower()
+        max_pr = float(input_features.get("max_pr", 0.0))
+        body_weight = float(input_features.get("body_weight", 0.0))
+        
+        # Base thresholds (personalized)
+        base_critical_angle = 60.0
+        if experience == "advanced" or experience == "elite":
+            base_critical_angle = 50.0 # Pro standard: deeper is fine
+        elif experience == "novice" or experience == "beginner":
+            base_critical_angle = 70.0 # Beginner standard: don't go too deep if unstable
+            
+        intensity_mult = 1.0
+        if rel_intensity_label == "high":
+            intensity_mult = 1.25 # Penalize form breakdown more under heavy load
+        elif rel_intensity_label == "low":
+            intensity_mult = 0.85
+            
+        # --- Weighted Severity & Consistency scoring ---
+        cumulative_penalty = 0.0
+        total_valid_frames = len(knee_angles)
+        
+        # 1. Depth penalties (Severity + Consistency)
+        for ka in knee_angles:
+            if ka < base_critical_angle:
+                # Severity scales with how far below threshold
+                severity = (base_critical_angle - ka) * 0.4
+                cumulative_penalty += (10.0 + severity)
+        
+        # 2. Alignment penalties (Nuanced drift)
+        alignment_drift_vals = [f.get("drift", 0) for f in FRAME_ANGLES_HISTORY]
+        consistency_count = 0
+        for drift in alignment_drift_vals:
+            if drift > 0.04: # Mild
+                cumulative_penalty += 5.0
+                consistency_count += 1
+            if drift > 0.08: # Severe
+                cumulative_penalty += 15.0
+                consistency_count += 2
+        
+        # Consistency multiplier: if issues are consistent, increase penalty
+        consistency_ratio = consistency_count / max(total_valid_frames, 1)
+        consistency_mult = 1.0 + (consistency_ratio * 0.5)
+        
+        weighted_form_score = ((std_dev * 40.0) + (cumulative_penalty / max(total_valid_frames, 1) * 20.0)) * intensity_mult * consistency_mult
+        form_score = round(max(0.0, min(100.0, weighted_form_score)), 2)
+        
+        # --- Confidence Score Calculation ---
+        vis_vals = [f.get("visibility", 0) for f in FRAME_ANGLES_HISTORY]
+        avg_vis = sum(vis_vals) / len(vis_vals) if vis_vals else 0
+        
+        if avg_vis > 0.8 and total_valid_frames > 10:
+            confidence_score = "High"
+        elif avg_vis > 0.5:
+            confidence_score = "Medium"
+        else:
+            confidence_score = "Low"
+
+        # --- Phase-Aware Logic for Explanations ---
+        phases = [] # 0: Descent, 1: Bottom, 2: Ascent
+        if len(knee_angles) > 5:
+            # Simple phase detection
+            for i in range(1, len(knee_angles)):
+                diff = knee_angles[i] - knee_angles[i-1]
+                if diff < -1.0: phases.append(0)
+                elif diff > 1.0: phases.append(2)
+                else: phases.append(1)
+        
+        # Find where the penalties occurred
+        phase_issues = {"descent": False, "ascent": False}
+        for i, ka in enumerate(knee_angles):
+            if i < len(phases) and ka < base_critical_angle:
+                if phases[i] == 0: phase_issues["descent"] = True
+                if phases[i] == 2: phase_issues["ascent"] = True
+
         angle_stats.update({
             "knee_mean": round(float(np.mean(arr)), 2),
             "knee_std": knee_std,
@@ -225,6 +303,9 @@ def run_pipeline(
             "depth_score": knee_min,
             "smoothness_score": round(1.0 / (knee_std + 1e-6), 2),
             "form_score": form_score,
+            "confidence_score": confidence_score,
+            "issue_phases": phase_issues,
+            "intensity_mult": intensity_mult,
         })
         if len(hip_angles) > 0:
             arr = np.array(hip_angles)
@@ -244,7 +325,7 @@ def run_pipeline(
             })
 
     risk: RiskOutput = get_risk_score(validated, model_name=model_name)
-    explanation: Explanation = explain_prediction(validated, model_name=model_name)
+    explanation: Explanation = explain_prediction(validated, angle_stats=angle_stats, model_name=model_name)
     coaching: CoachingReport = get_recommendations(validated)
 
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -281,6 +362,7 @@ def run_pipeline(
         input_features  = validated,
         frame_angles    = FRAME_ANGLES_HISTORY.copy() if FRAME_ANGLES_HISTORY else [],
         angle_stats     = angle_stats,
+        confidence_score = angle_stats.get("confidence_score", "Medium"),
     )
 
 

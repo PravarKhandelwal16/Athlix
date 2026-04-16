@@ -159,7 +159,7 @@ def _build_reasons(
     return reasons if reasons else ["No dominant individual risk factors identified."]
 
 
-def _rule_based_reasons(raw_features: dict) -> list[str]:
+def _rule_based_reasons(raw_features: dict, angle_stats: dict = None) -> list[str]:
     reasons = []
 
     tl  = raw_features.get("training_load",   5.0)
@@ -167,6 +167,26 @@ def _rule_based_reasons(raw_features: dict) -> list[str]:
     fi  = raw_features.get("fatigue_index",   5.0)
     fd  = raw_features.get("form_decay",      0.5)
     pi  = raw_features.get("previous_injury", 0)
+    
+    # Movement specific insights from angle_stats
+    if angle_stats:
+        phase_issues = angle_stats.get("issue_phases", {})
+        intensity_mult = angle_stats.get("intensity_mult", 1.0)
+        
+        if phase_issues.get("ascent") and intensity_mult > 1.1:
+            reasons.append("Form breaks down during ascent under heavy load")
+        elif phase_issues.get("ascent"):
+            reasons.append("Instability detected during the ascent (driving) phase")
+        
+        if phase_issues.get("descent") and angle_stats.get("knee_std", 0) > 10:
+            reasons.append("Stability issues during the descent (eccentric) phase")
+        
+        knee_min = angle_stats.get("knee_min", 180)
+        # Check if stable but lacks depth
+        if knee_min > 95 and angle_stats.get("knee_std", 0) < 5:
+            reasons.append("Movement is stable but lacks optimal depth")
+        elif knee_min > 95:
+            reasons.append("Movement lacks depth; focus on reaching parallel")
 
     if tl >= 8.0:
         reasons.append(f"Training load is very high ({tl:.1f}/10)")
@@ -196,6 +216,7 @@ def _rule_based_reasons(raw_features: dict) -> list[str]:
 
 def explain_prediction(
     input_features: dict,
+    angle_stats: dict = None,
     model_name: str = "xgboost",
     top_n: int = 5,
 ) -> Explanation:
@@ -216,9 +237,15 @@ def explain_prediction(
         model     = _load_model(model_name)
         shap_dict = _shap_contributions(model, X_row, feat_cols)
         reasons   = _build_reasons(shap_dict, raw_features, top_n=top_n)
+        
+        # Add movement-aware reasons from rule-based engine to SHAP output for richness
+        movement_reasons = _rule_based_reasons(raw_features, angle_stats)
+        for mr in movement_reasons:
+            if mr not in reasons:
+                reasons.append(mr)
     except Exception as exc:
         logger.warning("SHAP failed (%s), falling back to rule-based.", exc)
-        reasons = _rule_based_reasons(raw_features)
+        reasons = _rule_based_reasons(raw_features, angle_stats)
         mode = "rule-based"
 
     level    = risk_result.risk_level

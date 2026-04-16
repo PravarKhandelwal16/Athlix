@@ -184,14 +184,23 @@ function Results() {
 
             <ActivityRing score={mockData.score} />
 
-            <div className="mt-12 w-full grid grid-cols-2 gap-4 text-center">
+            <div className="mt-12 w-full grid grid-cols-3 gap-4 text-center">
               <div className="bg-black/40 rounded-2xl p-4">
-                <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-1">Reps Logged</div>
-                <div className="text-xl font-bold text-[#ff9f0a]">{mockData.decayData.length} Total</div>
+                <div className="text-zinc-400 text-[10px] font-semibold uppercase tracking-wider mb-1">Reps Logged</div>
+                <div className="text-lg font-bold text-[#ff9f0a]">{mockData.decayData.length}</div>
               </div>
               <div className="bg-black/40 rounded-2xl p-4">
-                <div className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mb-1">Speed Level</div>
-                <div className="text-xl font-bold text-[#32ade6]">{mockData.velocityClassification || 'Moderate'}</div>
+                <div className="text-zinc-400 text-[10px] font-semibold uppercase tracking-wider mb-1">Confidence Score</div>
+                <div className={`text-lg font-bold ${
+                  mockData.confidenceScore === 'High' ? 'text-[#34c759]' :
+                  mockData.confidenceScore === 'Medium' ? 'text-[#ff9f0a]' : 'text-[#ff3b30]'
+                }`}>
+                  {mockData.confidenceScore || 'Medium'}
+                </div>
+              </div>
+              <div className="bg-black/40 rounded-2xl p-4">
+                <div className="text-zinc-400 text-[10px] font-semibold uppercase tracking-wider mb-1">Speed Level</div>
+                <div className="text-lg font-bold text-[#32ade6]">{mockData.velocityClassification || 'Moderate'}</div>
               </div>
             </div>
           </div>

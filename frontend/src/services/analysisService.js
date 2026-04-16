@@ -187,6 +187,21 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
   // ── Attempt backend call ───────────────────────────────────────
   const formData = new FormData();
   formData.append('file', file);
+  
+  // -- Extract and compute values for API --
+  const pr = parseFloat(profile?.maxPR) || 140;
+  const w = config.usesWeight ? (parseFloat(sessionContext?.weightUsed) || 100) : 0;
+  const relInt = config.usesWeight
+    ? clamp(w / pr, 0.1, 1.2)
+    : clamp(0.5 + (parseFloat(sessionContext?.soreness) || 3) * 0.05, 0.3, 0.9);
+  
+  const intensityLabel = relInt > 0.85 ? 'High' : (relInt > 0.65 ? 'Medium' : 'Low');
+
+  formData.append('training_experience', profile?.experience || 'Intermediate');
+  formData.append('relative_intensity', intensityLabel);
+  formData.append('max_pr', pr);
+  formData.append('body_weight', parseFloat(profile?.weight) || 0);
+  
   let backendData = null;
 
   try {
@@ -216,11 +231,7 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
     + Date.now() % 10000;
 
   // ── Core derived values ────────────────────────────────────────
-  const pr = parseFloat(profile?.maxPR) || 140;
-  const w = config.usesWeight ? (parseFloat(sessionContext?.weightUsed) || 100) : 0;
-  const relativeIntensity = config.usesWeight
-    ? clamp(w / pr, 0.1, 1.2)
-    : clamp(0.5 + (parseFloat(sessionContext?.soreness) || 3) * 0.05, 0.3, 0.9);
+  const relativeIntensity = relInt;
   const sets = parseFloat(sessionContext?.sets) || 3;
   const userHeightCm = parseFloat(profile?.height) || 180;
   const heightMeters = userHeightCm / 100;
@@ -415,6 +426,7 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
     maxPR: pr,
     feature_vector: backendData?.feature_vector ?? {},
     form_flags: backendData?.form_flags ?? {},
+    confidenceScore: backendData?.feature_vector?.confidence_score || 'Medium',
   };
 
   localStorage.setItem('temp_analysis', JSON.stringify(finalResult));
