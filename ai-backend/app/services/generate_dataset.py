@@ -4,11 +4,17 @@ generate_dataset.py
 Synthetic dataset generator and feature engineering pipeline for the
 Athlix AI Injury Predictor.
 
-Run directly:
-    python ai-backend/data/generate_dataset.py
+Belongs in app/services/ alongside feature_engineering.py and pose_service.py
+because it is a data-generation service consumed by the training pipeline.
 
-Or import the two public functions in other modules:
-    from data.generate_dataset import generate_raw_dataset, engineer_features
+Run directly (from repo root):
+    python -m app.services.generate_dataset
+
+Public API
+~~~~~~~~~~
+    generate_raw_dataset(n_samples) -> pd.DataFrame
+    engineer_features(df)           -> pd.DataFrame
+    scale_features(df)              -> (pd.DataFrame, MinMaxScaler)
 """
 
 from __future__ import annotations
@@ -43,21 +49,20 @@ def generate_raw_dataset(n_samples: int = 500) -> pd.DataFrame:
     The injury risk target is computed from a weighted combination of the raw
     features plus Gaussian noise, then clipped to [0, 100].
     """
-    training_load   = np.random.uniform(1, 10, n_samples)          # daily load 1-10
-    recovery_score  = np.random.uniform(0, 100, n_samples)         # sleep + HRV proxy
-    fatigue_index   = np.random.uniform(0, 10, n_samples)          # cumulative fatigue
-    form_decay      = np.random.uniform(0, 1, n_samples)           # technique quality loss
-    previous_injury = np.random.randint(0, 2, n_samples)           # binary history flag
+    training_load   = np.random.uniform(1, 10, n_samples)
+    recovery_score  = np.random.uniform(0, 100, n_samples)
+    fatigue_index   = np.random.uniform(0, 10, n_samples)
+    form_decay      = np.random.uniform(0, 1, n_samples)
+    previous_injury = np.random.randint(0, 2, n_samples)
 
-    # --- Composite risk score with domain-inspired weighting ---
-    # High load, high fatigue, poor recovery, and prior injury all push risk up.
+    # Composite risk score with domain-inspired weighting
     noise = np.random.normal(0, 5, n_samples)
     injury_risk = (
-        training_load  * 4.5   # load is the strongest driver
-        + fatigue_index * 3.5  # fatigue amplifies risk
+        training_load  * 4.5
+        + fatigue_index * 3.5
         + (100 - recovery_score) * 0.15  # poor recovery -> higher risk
-        + form_decay   * 10    # bad form correlates strongly with injury
-        + previous_injury * 10  # history of injury raises baseline risk
+        + form_decay   * 10
+        + previous_injury * 10
         + noise
     )
     injury_risk = np.clip(injury_risk, 0, 100)
@@ -83,25 +88,21 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     Derived Features
     ----------------
     ACWR (Acute:Chronic Workload Ratio)
-        Industry-standard metric used in sports science.
-        Acute load  = average training_load over last 7 rows (1-week window).
-        Chronic load = average training_load over last 28 rows (4-week window).
-        A ratio > 1.3 is generally considered a 'danger zone' for injury.
+        Acute load  = 7-row rolling mean of training_load.
+        Chronic load = 28-row rolling mean of training_load.
+        Ratio > 1.3 signals overtraining danger zone.
 
     recovery_deficit
-        = 100 - recovery_score
-        Flips the recovery scale so that higher values mean MORE deficit,
-        making it a positive risk indicator like the other features.
+        = 100 - recovery_score. Positive risk indicator.
 
     fatigue_trend
-        Rolling 7-row mean of fatigue_index.
-        Captures whether fatigue is building up over time rather than just
-        looking at a single snapshot. A rising trend is a warning sign.
+        7-row rolling mean of fatigue_index.
+        Detects sustained fatigue build-up over time.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Output of ``generate_raw_dataset``.
+        Output of generate_raw_dataset().
 
     Returns
     -------
@@ -117,7 +118,6 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     acute_load   = df["training_load"].rolling(window=acute_window,  min_periods=1).mean()
     chronic_load = df["training_load"].rolling(window=chronic_window, min_periods=1).mean()
 
-    # Avoid division-by-zero: if chronic_load is 0 treat ACWR as 1.0 (neutral)
     df["ACWR"] = np.where(
         chronic_load != 0,
         (acute_load / chronic_load).round(4),
@@ -146,21 +146,13 @@ def scale_features(df: pd.DataFrame) -> tuple[pd.DataFrame, MinMaxScaler]:
     """
     Apply Min-Max scaling to all feature columns (everything except the target).
 
-    Min-Max scales each column to the range [0, 1], preserving the shape of the
-    distribution while making all features comparable in magnitude - important
-    for distance-based models and gradient-boosted trees alike.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Engineered feature DataFrame (output of ``engineer_features``).
+    The target column injury_risk is left unscaled so that model output
+    remains interpretable in the original 0-100 range.
 
     Returns
     -------
     scaled_df : pd.DataFrame
-        The scaled DataFrame (target column ``injury_risk`` is NOT scaled).
-    scaler : MinMaxScaler
-        Fitted scaler instance - save this for inference-time transforms.
+    scaler    : MinMaxScaler   (fitted — save this for inference-time use)
     """
     feature_cols = [c for c in df.columns if c != "injury_risk"]
     target_col   = df[["injury_risk"]].copy()
@@ -169,13 +161,13 @@ def scale_features(df: pd.DataFrame) -> tuple[pd.DataFrame, MinMaxScaler]:
     scaled_arr = scaler.fit_transform(df[feature_cols])
 
     scaled_df = pd.DataFrame(scaled_arr, columns=feature_cols, index=df.index)
-    scaled_df["injury_risk"] = target_col.values  # re-attach unscaled target
+    scaled_df["injury_risk"] = target_col.values
 
     return scaled_df, scaler
 
 
 # ---------------------------------------------------------------------------
-# STEP 4 - Pretty-print feature explanations
+# Feature reference map (used by train_models.py for display)
 # ---------------------------------------------------------------------------
 
 FEATURE_EXPLANATIONS: dict[str, str] = {
@@ -192,7 +184,7 @@ FEATURE_EXPLANATIONS: dict[str, str] = {
 
 
 def print_feature_guide(df: pd.DataFrame) -> None:
-    """Print a human-readable guide for every column present in *df*."""
+    """Print a human-readable guide for every column present in df."""
     sep = "-" * 65
     print("\n" + sep)
     print("  FEATURE GUIDE")
@@ -204,42 +196,39 @@ def print_feature_guide(df: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entry point - run as a script
+# Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print("\nAthlix - AI Injury Predictor | Dataset Pipeline\n")
+    import os, sys
+    # Allow running as: python app/services/generate_dataset.py from repo root
+    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    DATA_OUT = os.path.join(_root, "ai-backend", "data", "athlete_injury_dataset.csv")
 
-    # 1. Generate raw data
-    print("[1] Generating raw synthetic dataset (500 athletes)...")
+    print("\nAthlix - Dataset Generation Service\n")
+
+    print("[1] Generating raw dataset (500 samples)...")
     raw_df = generate_raw_dataset(n_samples=500)
-    print(f"    Shape: {raw_df.shape}  (rows x columns)\n")
+    print(f"    Shape: {raw_df.shape}\n")
 
-    # 2. Feature engineering
-    print("[2] Engineering derived features...")
+    print("[2] Engineering features...")
     engineered_df = engineer_features(raw_df)
-    print(f"    Shape after engineering: {engineered_df.shape}\n")
+    print(f"    Shape: {engineered_df.shape}\n")
 
-    # 3. Scale features
-    print("[3] Scaling features with Min-Max Scaler...")
-    scaled_df, scaler = scale_features(engineered_df)
-    print(f"    Shape after scaling:     {scaled_df.shape}\n")
+    print("[3] Scaling features...")
+    scaled_df, _ = scale_features(engineered_df)
+    print(f"    Shape: {scaled_df.shape}\n")
 
-    # 4. Show first 5 rows
-    print("[4] First 5 rows of the ENGINEERED (pre-scale) dataset:")
-    print(engineered_df.head().to_string(index=True))
+    print("[4] First 5 rows (engineered):")
+    print(engineered_df.head().to_string())
 
-    print("\n[5] First 5 rows of the SCALED dataset (features in [0, 1]):")
-    print(scaled_df.head().to_string(index=True))
+    print("\n[5] First 5 rows (scaled):")
+    print(scaled_df.head().to_string())
 
-    # 5. Feature guide
     print_feature_guide(scaled_df)
 
-    # 6. Basic statistics
-    print("[6] Descriptive statistics (engineered dataset):")
+    print("[6] Descriptive statistics:")
     print(engineered_df.describe().round(2).to_string())
 
-    # 7. Save to CSV for downstream use
-    output_path = "ai-backend/data/athlete_injury_dataset.csv"
-    engineered_df.to_csv(output_path, index=False)
-    print(f"\n[OK] Dataset saved -> {output_path}")
+    engineered_df.to_csv(DATA_OUT, index=False)
+    print(f"\n[OK] Dataset saved -> {DATA_OUT}")
