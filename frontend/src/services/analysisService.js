@@ -8,6 +8,7 @@
 
 import { mockAnalysisData } from '../data/mockAnalysisData';
 import { getExerciseConfig } from '../data/exerciseConfigs';
+import { videoStore } from './videoStore';
 
 // ─── Internal helpers ──────────────────────────────────────────────
 
@@ -138,6 +139,9 @@ function generateSummary(exerciseDisplayName, issues, relativeIntensity, overall
  * @param {string} exerciseType - "squat" | "deadlift" | "pushup"
  */
 export const analyzeMovement = async (file, context = {}, exerciseType = 'squat') => {
+  // Persist the raw File object in memory so Results can extract frames
+  if (file) videoStore.setFile(file);
+
   const config = getExerciseConfig(exerciseType);
   const { profile, sessionContext } = context;
 

@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { api } from "../services/api";
-import FormCorrectionPreview from "../components/FormCorrectionPreview";
+import MovementBreakdownTimeline from "../components/MovementBreakdownTimeline";
 
 // ─── Utility: Animated number counter ────────────────────────────
 function useCounter(target, duration = 1200) {
@@ -443,15 +443,19 @@ function Results() {
           </div>
         </FadeSection>
 
-        {/* ─── Form Correction Preview ─────────────────────────── */}
+        {/* ─── Movement Breakdown Timeline ─────────────────────── */}
         <FadeSection delay={350}>
-          <FormCorrectionPreview
+          <MovementBreakdownTimeline
             exerciseType={mockData.exerciseType || 'squat'}
+<<<<<<< HEAD
             formFlags={{
               knee_valgus: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('knee') || i.issue.toLowerCase().includes('valgus')),
               incomplete_depth: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('depth')),
               excessive_forward_lean: mockData.keyIssues?.some(i => i.issue.toLowerCase().includes('posture') || i.issue.toLowerCase().includes('lean') || i.issue.toLowerCase().includes('decay')),
             }}
+=======
+            keyIssues={mockData.keyIssues || []}
+>>>>>>> 1898f6e (new movement breakdown)
           />
         </FadeSection>
 
