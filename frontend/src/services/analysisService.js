@@ -220,7 +220,7 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
   const riskLevel           = (backendData?.risk_level ?? 'Moderate').toUpperCase();
   const riskColor           = backendData?.risk_color ?? 'yellow';
   const reasonArray         = backendData?.injury_reasons ?? [];
-  const explanationInsight  = reasonArray.length > 0 ? reasonArray[0] : null;
+  let explanationInsight    = reasonArray.length > 0 ? reasonArray[0] : null;
 
   // ── Velocity estimation ────────────────────────────────────────
   const pixelDisplacement = 250 + sessionRandom(seed) * 100;
@@ -336,8 +336,8 @@ export const analyzeMovement = async (file, context = {}, exerciseType = 'squat'
   );
 
   // ── Insight ────────────────────────────────────────────────────
-  let explanationInsight = backendData?.explanationInsight ?? 'Solid movement pattern under acceptable relative load.';
   if (!backendData) {
+    explanationInsight = 'Solid movement pattern under acceptable relative load.';
     if (movementRiskIndex >= 75) {
       if (recoveryMultiplier > 1.2) {
         explanationInsight = 'Elevated risk due to poor recovery state amplifying form fatigue.';
