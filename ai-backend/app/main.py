@@ -53,12 +53,22 @@ def create_app() -> FastAPI:
         global _ML_READY
         logger.info("Athlix API v%s starting up.", APP_VERSION)
         try:
+            # Initialize ML Model
             from app.services.risk_engine import init_models
             init_models()
+            
+            # Initialize Prediction Service (Booster + Buffer)
+            from app.services.prediction_service import get_prediction_service
+            get_prediction_service()
+            
+            # Initialize Pose Service (MediaPipe)
+            from app.services.pose_service import get_pose_service
+            get_pose_service()
+            
             _ML_READY = True
-            logger.info("ML models and scaler loaded and cached successfully.")
+            logger.info("ML models and MediaPipe pose service loaded and cached successfully.")
         except Exception as exc:
-            logger.critical("ML models could not be loaded: %s. Continuing in degraded mode.", exc)
+            logger.critical("Services could not be fully loaded: %s. Continuing in degraded mode.", exc)
             _ML_READY = False
 
     @app.on_event("shutdown")

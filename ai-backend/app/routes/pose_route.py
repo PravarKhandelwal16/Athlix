@@ -45,3 +45,53 @@ async def detect_pose_endpoint(
     except Exception as exc:
         logger.exception("Unexpected error during pose detection.")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Pose detection failed.") from exc
+
+
+@router.post("/process-frame")
+async def process_frame(file: UploadFile = File(...)):
+    """
+    Optimized real-time frame processing. 
+    Returns risk score, level, and coaching feedback.
+    """
+    start_time = time.time()
+    try:
+        contents = await file.read()
+        
+        # 1. Pose Landmarks
+        svc = get_pose_service()
+        landmarks = svc.process_frame_from_bytes(contents)
+        
+        if not landmarks:
+            return {
+                "risk_score": 0,
+                "risk_level": "None",
+                "injury_reason": "No person detected in frame.",
+                "latency_ms": round((time.time() - start_time) * 1000, 2)
+            }
+            
+        # 2. ML Prediction
+        pred_svc = get_prediction_service()
+        result = pred_svc.predict(landmarks)
+        
+        if not result:
+            # Buffer not full yet
+            return {
+                "risk_score": 0,
+                "risk_level": "Analyzing...",
+                "injury_reason": "Collecting movement data...",
+                "latency_ms": round((time.time() - start_time) * 1000, 2)
+            }
+            
+        # Return compact response for UI
+        return {
+            "risk_score": result["risk_score"],
+            "risk_level": result["risk_level"],
+            "injury_reason": result["injury_reason"],
+            "dominant_issue": result["dominant_issue"],
+            "confidence": result["confidence"],
+            "latency_ms": round((time.time() - start_time) * 1000, 2)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in frame processing: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

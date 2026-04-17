@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
+import { api } from "../services/api";
 import { analyzeMovement } from "../services/analysisService";
 import { EXERCISE_CONFIGS } from "../data/exerciseConfigs";
 
@@ -29,6 +30,20 @@ function Upload() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Live Mode State
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [liveResults, setLiveResults] = useState({
+    risk_score: 0,
+    risk_level: 'Analyizing...',
+    injury_reason: 'Waiting for movement...',
+    confidence: 0,
+    latency_ms: 0
+  });
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const analysisIntervalRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('athlix_profile');
@@ -100,6 +115,64 @@ function Upload() {
       setIsProcessing(false);
     }
   };
+
+  const startLiveMode = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720, facingMode: "user" } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setIsLiveMode(true);
+        startAnalysisLoop();
+      }
+    } catch (err) {
+      setError("Camera access denied. Please enable camera permissions.");
+    }
+  };
+
+  const stopLiveMode = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsLiveMode(false);
+    if (analysisIntervalRef.current) {
+      clearInterval(analysisIntervalRef.current);
+    }
+  };
+
+  const startAnalysisLoop = () => {
+    if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+    
+    analysisIntervalRef.current = setInterval(async () => {
+      if (!videoRef.current || !canvasRef.current || !isLiveMode) return;
+
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      // Match canvas size to video aspect ratio
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          const result = await api.analyzeFrame(blob);
+          setLiveResults(result);
+        } catch (err) {
+          console.error("Frame analysis error:", err);
+        }
+      }, 'image/jpeg', 0.8);
+    }, 300); // 300ms polling rate
+  };
+
+  useEffect(() => {
+    return () => stopLiveMode();
+  }, []);
 
   if (error) {
     return (
@@ -274,13 +347,75 @@ function Upload() {
             </div>
 
             {/* Provide Data */}
-            <div className="border-t border-zinc-900 pt-12">
-              <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-600 mb-6 flex items-center">
-                <span className="text-white mr-4">05 //</span> Visual Payload
-              </h2>
+              <div className="border-t border-zinc-900 pt-12">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-600 flex items-center">
+                    <span className="text-white mr-4">05 //</span> Visual Payload
+                  </h2>
+                  <button 
+                    onClick={isLiveMode ? stopLiveMode : startLiveMode}
+                    className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 border ${isLiveMode ? 'border-red-900 text-red-500 bg-red-500/10' : 'border-zinc-800 text-zinc-400 hover:text-white hover:border-white'} transition-all`}
+                  >
+                    {isLiveMode ? '● Stop Camera' : 'Activate Live Biometrics'}
+                  </button>
+                </div>
 
-              {!selectedFile ? (
-                <div
+                {isLiveMode ? (
+                  <div className="relative border border-zinc-800 bg-black aspect-video overflow-hidden group">
+                    <video 
+                      ref={videoRef} 
+                      autoPlay 
+                      muted 
+                      playsInline 
+                      className="w-full h-full object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700" 
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                    
+                    {/* HUD Overlay */}
+                    <div className="absolute top-6 left-6 flex flex-col space-y-2 pointer-events-none">
+                      <div className="bg-black/80 backdrop-blur-md border border-zinc-800 p-4 min-w-[200px]">
+                        <p className="text-zinc-500 text-[8px] uppercase tracking-[0.2em] mb-1">Risk Index</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-2xl font-black tracking-tighter">{(liveResults.risk_score * 100).toFixed(1)}%</span>
+                          <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${
+                            liveResults.risk_level === 'High' ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]' :
+                            liveResults.risk_level === 'Medium' ? 'bg-amber-500 text-black' : 'bg-emerald-500 text-black'
+                          }`}>
+                            {liveResults.risk_level}
+                          </span>
+                        </div>
+                        <div className="w-full h-1 bg-zinc-900 mt-3 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-500 rounded-full ${
+                              liveResults.risk_level === 'High' ? 'bg-red-500' :
+                              liveResults.risk_level === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${liveResults.risk_score * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="absolute bottom-6 right-6 left-6 pointer-events-none">
+                      <div className="bg-black/80 backdrop-blur-md border border-zinc-900 p-6 flex items-start space-x-6">
+                        <div className="w-12 h-12 rounded-full border border-zinc-800 flex items-center justify-center flex-shrink-0">
+                          <svg className={`w-5 h-5 ${liveResults.risk_score > 0.5 ? 'text-red-500 animate-pulse' : 'text-zinc-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-zinc-500 text-[8px] uppercase tracking-[0.2em] mb-1">Live Coaching Feedback</p>
+                          <p className="text-white text-xs font-mono leading-relaxed uppercase tracking-wider">{liveResults.injury_reason}</p>
+                        </div>
+                        <div className="ml-auto text-right">
+                          <p className="text-zinc-700 text-[8px] uppercase tracking-widest">Latency: {liveResults.latency_ms}ms</p>
+                          <p className="text-zinc-700 text-[8px] uppercase tracking-widest mt-1">Status: {liveResults.dominant_issue || 'Scanning...'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : !selectedFile ? (
+                  <div
                   className={`relative border border-zinc-800 bg-[#050505] p-24 text-center transition-all cursor-pointer group ${isDragOver ? 'border-white bg-[#111] scale-[1.01]' : 'hover:border-zinc-600 hover:bg-[#0a0a0a]'}`}
                   onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
                   onClick={() => document.getElementById('image-upload').click()}

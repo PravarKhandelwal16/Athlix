@@ -12,9 +12,13 @@ from app.models.schemas import AngleResult, FormFlags, Landmark, PoseDetectionRe
 from app.services.feature_engineering import analyze_form
 from app.utils.angle_utils import calculate_angle, compute_all_angles
 
+import threading
+
 logger = logging.getLogger(__name__)
 
-FRAME_ANGLES_HISTORY = []
+# Global instances for singleton pattern
+POSE_SERVICE_INSTANCE = None
+POSE_LOCK = threading.Lock()
 
 try:
     _mp_pose        = mp.solutions.pose
@@ -54,17 +58,27 @@ class PoseService:
             return None
 
         if not _MP_AVAILABLE:
-            time.sleep(0.1)
             return _mock_landmarks()
 
-        rgb_frame.flags.writeable = False
-        results = self._pose.process(rgb_frame)
-        rgb_frame.flags.writeable = True
+        # MediaPipe processing is not thread-safe for a single instance
+        with POSE_LOCK:
+            rgb_frame.flags.writeable = False
+            results = self._pose.process(rgb_frame)
+            rgb_frame.flags.writeable = True
 
         if not results.pose_landmarks:
             return None
 
-        return _parse_landmarks_to_schema(results.pose_landmarks)
+        return _parse_landmarks_to_items(results.pose_landmarks)
+
+    def process_frame_from_bytes(self, image_bytes: bytes) -> Optional[List[Landmark]]:
+        """Efficiently decode and process image from bytes."""
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        bgr_frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if bgr_frame is None:
+            return None
+        rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+        return self.process_frame(rgb_frame)
 
     def close(self) -> None:
         if _MP_AVAILABLE:
@@ -113,36 +127,22 @@ def _mock_landmarks() -> List[Landmark]:
 
 
 
+def get_pose_service(static_mode: bool = False) -> PoseService:
+    global POSE_SERVICE_INSTANCE
+    with POSE_LOCK:
+        if POSE_SERVICE_INSTANCE is None:
+            POSE_SERVICE_INSTANCE = PoseService(static_image_mode=static_mode)
+    return POSE_SERVICE_INSTANCE
+
 def detect_pose(image_bytes: bytes) -> PoseDetectionResponse:
-    """Decode image bytes, run BlazePose, compute angles and form flags, and return a structured response."""
+    """Legacy wrapper for backward compatibility, uses singleton pose service."""
     t_start = time.perf_counter()
-
-    arr = np.frombuffer(image_bytes, dtype=np.uint8)
-    bgr_frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-
-    if bgr_frame is None:
-        raise ValueError("Image decoding failed. Ensure the file is a valid JPEG, PNG, or WebP.")
-
-    rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
-
-    if not _MP_AVAILABLE:
-        results = type('MockResults', (), {'pose_landmarks': True})()
-        _parse_landmarks_to_items = _mock_landmark_items
-    else:
-        with _mp_pose.Pose(
-            static_image_mode=True,
-            model_complexity=1,
-            smooth_landmarks=False,
-            enable_segmentation=False,
-            min_detection_confidence=0.5,
-        ) as pose:
-            rgb_frame.flags.writeable = False
-            results = pose.process(rgb_frame)
-            rgb_frame.flags.writeable = True
-
+    svc = get_pose_service()
+    landmark_items = svc.process_frame_from_bytes(image_bytes)
+    
     elapsed_ms = (time.perf_counter() - t_start) * 1_000
-
-    if not results.pose_landmarks:
+    
+    if not landmark_items:
         return PoseDetectionResponse(
             pose_detected=False,
             landmark_count=0,
@@ -150,7 +150,6 @@ def detect_pose(image_bytes: bytes) -> PoseDetectionResponse:
             landmarks=[],
         )
 
-    landmark_items = _parse_landmarks_to_items(results.pose_landmarks)
     raw_angles = compute_all_angles(landmark_items)
 
     return PoseDetectionResponse(
@@ -170,57 +169,22 @@ def detect_pose(image_bytes: bytes) -> PoseDetectionResponse:
     )
 
 
-def _parse_landmarks_to_schema(pose_landmarks) -> List[Landmark]:
-    landmarks: List[Landmark] = []
-    for idx, lm in enumerate(pose_landmarks.landmark):
-        try:
-            name = _POSE_LANDMARKS(idx).name
-        except ValueError:
-            name = f"LANDMARK_{idx}"
-        landmarks.append(
-            Landmark(
-                name=name,
-                x=float(np.clip(lm.x, 0.0, 1.0)),
-                y=float(np.clip(lm.y, 0.0, 1.0)),
-                z=float(lm.z),
-                visibility=float(np.clip(lm.visibility, 0.0, 1.0)),
-            )
-        )
-    return landmarks
-
-
 def _parse_landmarks_to_items(pose_landmarks) -> List[Landmark]:
+    """Converts MediaPipe landmarks to our internal Landmark schema."""
     items: List[Landmark] = []
     for idx, lm in enumerate(pose_landmarks.landmark):
         try:
             name = _POSE_LANDMARKS(idx).name
-        except ValueError:
+        except (ValueError, TypeError):
             name = f"LANDMARK_{idx}"
         items.append(
-            PoseLandmarkItem(
+            Landmark(
                 id=idx,
                 name=name,
                 x=round(float(lm.x), 6),
                 y=round(float(lm.y), 6),
                 z=round(float(lm.z), 6),
                 visibility=round(float(np.clip(lm.visibility, 0.0, 1.0)), 6),
-            )
-        )
-    return items
-
-def _mock_landmark_items(pose_landmarks) -> List[Landmark]:
-    items = []
-    import random
-    from app.services.feature_engineering import _LM_INDEX
-    for name, idx in _LM_INDEX.items():
-        items.append(
-            Landmark(
-                id=idx,
-                name=name,
-                x=round(random.uniform(0.4, 0.6), 6),
-                y=round(random.uniform(0.4, 0.6), 6),
-                z=round(random.uniform(-0.1, 0.1), 6),
-                visibility=1.0,
             )
         )
     return items
